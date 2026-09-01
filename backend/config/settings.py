@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import hashlib
 import os
 from datetime import timedelta
 from pathlib import Path
@@ -26,10 +27,15 @@ def env(name, default=None):
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env(
+# SimpleJWT HMAC-SHA256 requires at least 32 bytes.
+_raw_secret = env(
     "DJANGO_SECRET_KEY",
     "django-insecure-$sb6#kfg%%e(7n)ah$z)@r*_=6jx9vz=7gq#t9oagilc0jn$#b",
-)
+) or "django-insecure-$sb6#kfg%%e(7n)ah$z)@r*_=6jx9vz=7gq#t9oagilc0jn$#b"
+if len(_raw_secret.encode("utf-8")) < 32:
+    SECRET_KEY = hashlib.sha256(f"safos-jwt-key:{_raw_secret}".encode("utf-8")).hexdigest()
+else:
+    SECRET_KEY = _raw_secret
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env(
@@ -155,19 +161,9 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STORAGES = {
-    "default": {
-        "BACKEND": "storages.backends.s3.S3Storage",
-    },
-    "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
-    },
-}
 
 MEDIA_URL = "/media/"
-
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
 AUTH_USER_MODEL = 'users.User'
 
@@ -245,15 +241,50 @@ TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", "")
 
 
 
-AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
-
-AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME")
-
-AWS_S3_REGION_NAME = os.environ.get("AWS_S3_REGION_NAME")
-
-AWS_S3_CUSTOM_DOMAIN = os.environ.get("AWS_S3_CUSTOM_DOMAIN")
-
+# Railway / Tigris is S3-compatible, not AWS. Without endpoint_url, boto3
+# talks to s3.amazonaws.com and image uploads return 500.
+AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID") or env("ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY") or env("SECRET_ACCESS_KEY")
+AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME") or env("BUCKET")
+AWS_S3_ENDPOINT_URL = (
+    env("AWS_S3_ENDPOINT_URL")
+    or env("AWS_ENDPOINT_URL")
+    or env("ENDPOINT")
+)
+AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME") or env("REGION") or "auto"
+AWS_S3_CUSTOM_DOMAIN = env("AWS_S3_CUSTOM_DOMAIN") or None
+AWS_S3_ADDRESSING_STYLE = env("AWS_S3_ADDRESSING_STYLE", "virtual")
+AWS_S3_SIGNATURE_VERSION = "s3v4"
 AWS_S3_FILE_OVERWRITE = False
 AWS_DEFAULT_ACL = None
-AWS_QUERYSTRING_AUTH = False
+# Railway buckets are private; unsigned public URLs 403. Signed URLs work.
+AWS_QUERYSTRING_AUTH = env("AWS_QUERYSTRING_AUTH", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+AWS_QUERYSTRING_EXPIRE = int(env("AWS_QUERYSTRING_EXPIRE", str(60 * 60 * 24 * 7)))
+
+_s3_options = {
+    "access_key": AWS_ACCESS_KEY_ID,
+    "secret_key": AWS_SECRET_ACCESS_KEY,
+    "bucket_name": AWS_STORAGE_BUCKET_NAME,
+    "endpoint_url": AWS_S3_ENDPOINT_URL,
+    "region_name": AWS_S3_REGION_NAME,
+    "addressing_style": AWS_S3_ADDRESSING_STYLE,
+    "signature_version": AWS_S3_SIGNATURE_VERSION,
+    "file_overwrite": AWS_S3_FILE_OVERWRITE,
+    "default_acl": AWS_DEFAULT_ACL,
+    "querystring_auth": AWS_QUERYSTRING_AUTH,
+    "querystring_expire": AWS_QUERYSTRING_EXPIRE,
+    "custom_domain": AWS_S3_CUSTOM_DOMAIN,
+}
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {key: value for key, value in _s3_options.items() if value is not None},
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
