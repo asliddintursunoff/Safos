@@ -62,7 +62,7 @@ class MarketActivitySerializer(serializers.Serializer):
     last_order_at = serializers.DateTimeField(allow_null=True)
     first_order_at = serializers.DateTimeField(allow_null=True)
     days_since_last_order = serializers.SerializerMethodField()
-    avg_days_between_orders = serializers.FloatField(allow_null=True)
+    avg_days_between_orders = serializers.SerializerMethodField()
     frequency_code = serializers.SerializerMethodField()
     frequency_label = serializers.SerializerMethodField()
     taken_order_count = serializers.IntegerField()
@@ -81,6 +81,9 @@ class MarketActivitySerializer(serializers.Serializer):
 
     def get_days_since_last_order(self, obj):
         return as_int_days(getattr(obj, "days_since_last_order", None))
+
+    def get_avg_days_between_orders(self, obj):
+        return as_int_days(getattr(obj, "avg_days_between_orders", None))
 
     def get_never_ordered(self, obj):
         return obj.last_order_at is None
@@ -108,13 +111,16 @@ class MarketAnalyticsDetailSerializer(MarketVolumeSerializer):
     first_order_at = serializers.DateTimeField(allow_null=True)
     last_delivered_at = serializers.DateTimeField(allow_null=True)
     oldest_unpaid_order_at = serializers.DateTimeField(allow_null=True)
-    avg_days_between_orders = serializers.FloatField(allow_null=True)
+    avg_days_between_orders = serializers.SerializerMethodField()
     frequency_code = serializers.SerializerMethodField()
     frequency_label = serializers.SerializerMethodField()
     never_ordered = serializers.SerializerMethodField()
 
     def get_never_ordered(self, obj):
         return obj.last_order_at is None
+
+    def get_avg_days_between_orders(self, obj):
+        return as_int_days(getattr(obj, "avg_days_between_orders", None))
 
     def _frequency(self, obj):
         return frequency_code_and_label(

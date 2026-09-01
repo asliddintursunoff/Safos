@@ -483,7 +483,7 @@ function NearWaysScreen({ go }) {
   );
 }
 
-function MarketHub({ marketId, go }) {
+function MarketHub({ marketId, go, user }) {
   const [market, setMarket] = useState(null);
   const [stats, setStats] = useState(null);
   const [debts, setDebts] = useState([]);
@@ -557,6 +557,19 @@ function MarketHub({ marketId, go }) {
     }
   }
 
+  async function removeMarket() {
+    if (!window.confirm("Bu do'kon va uning buyurtmalari o'chiriladi. Davom etasizmi?")) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.deleteMarket(marketId);
+      go("#/markets");
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
   if (!market) {
     return (
       <div>
@@ -571,6 +584,7 @@ function MarketHub({ marketId, go }) {
     ? stats.total_debt
     : debts.reduce((sum, o) => sum + Number(o.remaining_debt || 0), 0);
   const currentStatus = (market.status_code || market.status || "AVAILABLE").toUpperCase();
+  const isAdmin = user?.role_type === "ADMIN";
   const marketStatusOptions = [
     { value: "AVAILABLE", label: "Mahsulotlar mavjud" },
     { value: "POSSIBLE", label: "Mahsulot kerak bo'lishi mumkin" },
@@ -581,6 +595,12 @@ function MarketHub({ marketId, go }) {
     <div>
       <ScreenHeader title={market.name} backTo={lastBack("#/markets")} go={go} />
       {market.image && <img className="market-hero" src={market.image} alt={market.name} decoding="async" />}
+      {isAdmin && (
+        <div className="grid2" style={{ marginBottom: 12 }}>
+          <button type="button" className="btn secondary" onClick={() => go(`#/markets/${marketId}/info`)}>Tahrirlash</button>
+          <button type="button" className="btn danger" disabled={busy} onClick={removeMarket}>O'chirish</button>
+        </div>
+      )}
       <div className="card">
         <div className="row" style={{ alignItems: 'flex-start' }}>
           <span className="ring" style={{ borderColor: "transparent" }}>
@@ -1150,7 +1170,7 @@ function MarketStatisticsScreen({ go, compact = false }) {
         status_color: r.status_color || r.status_color_code || marketStatusColor(r.status_code || r.status, r.status_display || r.status),
         status_display: r.status_display || r.status || (r.status_code ? statusMeta(r.status_code, r.status).label : ""),
         days_since_last_order: r.days_since_last_order != null ? r.days_since_last_order : null,
-        avg_days_between_orders: r.avg_days_between_orders != null ? Number(r.avg_days_between_orders) : null,
+        avg_days_between_orders: r.avg_days_between_orders != null ? Math.round(Number(r.avg_days_between_orders)) : null,
         total_debt: Number(r.total_debt || 0),
       }));
       setRows(nextRows);
@@ -1340,7 +1360,7 @@ function MarketStatisticsScreen({ go, compact = false }) {
                   </div>
                   <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <div className="muted" style={{ fontSize: 12 }}>Oxirgi: {m.days_since_last_order != null ? `${m.days_since_last_order} kun` : '—'}</div>
-                    <div className="muted" style={{ fontSize: 12 }}>O'rta: {m.avg_days_between_orders != null ? `${m.avg_days_between_orders.toFixed(1)} kun` : '—'}</div>
+                    <div className="muted" style={{ fontSize: 12 }}>O'rta: {m.avg_days_between_orders != null ? `${Math.round(m.avg_days_between_orders)} kun` : '—'}</div>
                   </div>
                 </div>
               </div>
@@ -2047,7 +2067,9 @@ export function DelivererApp({ user, path, parts, go, logout, admin = false }) {
   else if (path === "/markets/statistics") screen = <MarketStatisticsScreen go={go} compact={!admin} />;
   else   if (path === "/markets") screen = <MarketsScreen go={go} user={user} />;
   else if (path === "/markets/new") screen = <NewMarket go={go} backTo="#/markets" />;
-  else if (parts[0] === "markets" && parts[2] === "edit") {
+  else if (admin && parts[0] === "markets" && parts[2] === "info") {
+    screen = <NewMarket go={go} backTo={`#/markets/${parts[1]}`} marketId={parts[1]} />;
+  } else if (parts[0] === "markets" && parts[2] === "edit") {
     screen = <OrderFlow marketId={parts[1]} editOrderId={parts[3]} user={user} go={go} backTo={`#/markets/${parts[1]}`} />;
   } else if (parts[0] === "markets" && parts[2] === "order") {
     screen = <OrderFlow marketId={parts[1]} user={user} go={go} backTo={`#/markets/${parts[1]}`} />;
@@ -2058,7 +2080,7 @@ export function DelivererApp({ user, path, parts, go, logout, admin = false }) {
   } else if (parts[0] === "markets" && parts[2] === "debts") {
     screen = <MarketDebtOrdersScreen marketId={parts[1]} go={go} />;
   } else if (parts[0] === "markets" && parts[1]) {
-    screen = <MarketHub marketId={parts[1]} go={go} />;
+    screen = <MarketHub marketId={parts[1]} go={go} user={user} />;
   } else if (path === "/map") screen = <MapScreen go={go} />;
   else if (path === "/pending") screen = <PendingScreen go={go} />;
   else if (path === "/history") screen = <HistoryScreen go={go} admin={admin} />;

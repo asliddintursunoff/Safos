@@ -336,19 +336,6 @@ export function Login({ onLogin }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  function applyPhone(raw) {
-    setPhone(formatUzPhone(raw));
-  }
-
-  useEffect(() => {
-    const handler = (event) => {
-      const contact = event?.response?.contact || event?.contact;
-      if (contact?.phone_number) applyPhone(contact.phone_number);
-    };
-    tg?.onEvent?.("contactRequested", handler);
-    return () => tg?.offEvent?.("contactRequested", handler);
-  }, []);
-
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
@@ -371,11 +358,6 @@ export function Login({ onLogin }) {
       <p className="muted">Xodim kabineti</p>
       <form className="card stack" onSubmit={submit}>
         <PhoneInput value={phone} onChange={setPhone} />
-        {tg?.requestContact && (
-          <button type="button" className="btn secondary" onClick={() => tg.requestContact()}>
-            Kontakt yuborish
-          </button>
-        )}
         <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Parol" />
         <ErrorText error={error} />
         <button className="btn" disabled={busy}>{busy ? "Kutilmoqda..." : "Kirish"}</button>
@@ -465,17 +447,38 @@ export function MarketsScreen({ go, user }) {
   );
 }
 
-export function NewMarket({ go, backTo = "#/" }) {
+export function NewMarket({ go, backTo = "#/", marketId = null }) {
+  const editing = Boolean(marketId);
   const [form, setForm] = useState({
     name: "", description: "", owner_first_name: "", owner_last_name: "",
     owner_phone_number: "+998", discount_percentage: "", latitude: "", longitude: "",
   });
   const [photo, setPhoto] = useState(null);
+  const [existingImage, setExistingImage] = useState(null);
   const [error, setError] = useState("");
   const [note, setNote] = useState("Joylashuv ixtiyoriy");
+  const [busy, setBusy] = useState(false);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    if (!marketId) return;
+    api.market(marketId).then((m) => {
+      setForm({
+        name: m.name || "",
+        description: m.description || "",
+        owner_first_name: m.owner_first_name || m.owner?.first_name || "",
+        owner_last_name: m.owner_last_name || m.owner?.last_name || "",
+        owner_phone_number: formatUzPhone(m.owner_phone_number || m.owner?.phone_number || "+998"),
+        discount_percentage: m.discount_percentage ?? "",
+        latitude: m.latitude ?? "",
+        longitude: m.longitude ?? "",
+      });
+      setExistingImage(m.image || null);
+      if (m.latitude && m.longitude) setNote("Xaritadan tanlangan");
+    }).catch((err) => setError(err.message));
+  }, [marketId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -502,6 +505,16 @@ export function NewMarket({ go, backTo = "#/" }) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const lat = Number(form.latitude);
+    const lng = Number(form.longitude);
+    if (!mapRef.current || !window.L || form.latitude === "" || form.longitude === "") return;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    mapRef.current.setView([lat, lng], 16);
+    if (markerRef.current) mapRef.current.removeLayer(markerRef.current);
+    markerRef.current = window.L.marker([lat, lng]).addTo(mapRef.current);
+  }, [form.latitude, form.longitude]);
 
   function currentLocation() {
     navigator.geolocation.getCurrentPosition((pos) => {
@@ -532,18 +545,28 @@ export function NewMarket({ go, backTo = "#/" }) {
       fd.append("longitude", form.longitude);
     }
     if (photo) fd.append("image", photo);
+    setBusy(true);
+    setError("");
     try {
-      await api.createMarket(fd);
-      go(backTo);
+      if (editing) {
+        await api.updateMarket(marketId, fd);
+        go(backTo || `#/markets/${marketId}`);
+      } else {
+        await api.createMarket(fd);
+        go(backTo);
+      }
     } catch (err) {
       setError(err.message);
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
     <form className="stack" onSubmit={submit}>
-      <ScreenHeader title="Yangi do'kon" backTo={backTo} go={go} />
+      <ScreenHeader title={editing ? "Do'konni tahrirlash" : "Yangi do'kon"} backTo={backTo} go={go} />
       <input placeholder="Do'kon nomi *" value={form.name} onChange={(e) => set("name", e.target.value)} required />
+      {existingImage && !photo && <img className="market-hero" src={existingImage} alt="" decoding="async" />}
       <input type="file" accept="image/*" onChange={(e) => setPhoto(e.target.files[0] || null)} />
       <input placeholder="Egasi ismi" value={form.owner_first_name} onChange={(e) => set("owner_first_name", e.target.value)} />
       <input placeholder="Egasi familiyasi" value={form.owner_last_name} onChange={(e) => set("owner_last_name", e.target.value)} />
@@ -558,7 +581,7 @@ export function NewMarket({ go, backTo = "#/" }) {
         <input placeholder="Lng" value={form.longitude} onChange={(e) => set("longitude", e.target.value)} />
       </div>
       <ErrorText error={error} />
-      <button className="btn">Saqlash</button>
+      <button className="btn" disabled={busy}>{busy ? "Saqlanmoqda..." : "Saqlash"}</button>
     </form>
   );
 }

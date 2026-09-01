@@ -124,7 +124,10 @@ export const api = {
       body: body instanceof FormData ? body : JSON.stringify(body),
     }),
   updateMarket: (id, body) =>
-    request(`/api/markets/${id}/`, { method: "PATCH", body: JSON.stringify(body) }),
+    request(`/api/markets/${id}/`, {
+      method: "PATCH",
+      body: body instanceof FormData ? body : JSON.stringify(body),
+    }),
   deleteMarket: (id) => request(`/api/markets/${id}/`, { method: "DELETE" }),
   analyticsSummary: () => request("/api/markets/analytics/summary/"),
   analyticsVolume: (qs = "") => request(`/api/markets/analytics/volume/${qs}`),

@@ -71,22 +71,16 @@ class CanCreateMarket(BasePermission):
             return True
         if request.method == "POST":
             return user.role_type in ("ADMIN", "AGENT", "DELIVERER", "CUSTOMER")
-        return True
+        if request.method in ("PUT", "PATCH", "DELETE"):
+            return user.role_type == "ADMIN"
+        return False
 
     def has_object_permission(self, request, view, obj):
         user = request.user
         role = getattr(user, "role_type", None)
-        if role == "ADMIN":
-            return True
         if request.method in SAFE_METHODS:
             return True
-        if request.method == "DELETE":
-            return role == "ADMIN"
-        if role == "CUSTOMER":
-            return obj.owner_id == user.id
-        if role in ("AGENT", "DELIVERER"):
-            return obj.created_by_id == user.id or obj.owner_id == user.id
-        return False
+        return role == "ADMIN"
 
 
 class IsAdminOrDelivererOrReadOnly(BasePermission):

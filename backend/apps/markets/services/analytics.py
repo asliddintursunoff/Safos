@@ -329,7 +329,7 @@ def frequency_code_and_label(avg_days, taken_order_count):
         return "NEVER", "Buyurtma yo'q"
     if taken_order_count == 1 or avg_days is None:
         return "SINGLE_ORDER", "1 ta buyurtma"
-    avg = float(avg_days)
+    avg = as_int_days(avg_days)
     if avg <= 1.5:
         return "EVERY_DAY", "Har kuni"
     if avg <= 3.5:
@@ -354,7 +354,7 @@ def as_money(value) -> Decimal:
 def as_int_days(value):
     if value is None:
         return None
-    return int(value)
+    return int(round(float(value)))
 
 
 def status_color_for(status: str) -> str:
