@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, lastBack, money, rememberBack, saveSession } from "./api";
+import { openOrderPrint } from "./print";
 
 export const tg = window.Telegram?.WebApp;
 
@@ -99,22 +100,45 @@ function pad2(n) {
   return String(n).padStart(2, "0");
 }
 
+const TASHKENT = "Asia/Tashkent";
+
+function tashkentParts(date, withTime) {
+  const opts = {
+    timeZone: TASHKENT,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  };
+  if (withTime) {
+    opts.hour = "2-digit";
+    opts.minute = "2-digit";
+    opts.hourCycle = "h23";
+  }
+  const map = {};
+  for (const part of new Intl.DateTimeFormat("en-GB", opts).formatToParts(date)) {
+    if (part.type !== "literal") map[part.type] = part.value;
+  }
+  const dateStr = `${map.day}/${map.month}/${map.year}`;
+  if (!withTime) return dateStr;
+  return `${dateStr} ${map.hour}:${map.minute}`;
+}
+
 export function parseAnyDate(value) {
   if (!value && value !== 0) return null;
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   const str = String(value).trim();
   if (!str) return null;
-  if (/^\d{4}-\d{2}-\d{2}T/.test(str) || /Z$/.test(str)) {
+  if (/^\d{4}-\d{2}-\d{2}T/.test(str) || /[zZ]$/.test(str) || /[+-]\d{2}:\d{2}$/.test(str)) {
     const iso = new Date(str);
     if (!Number.isNaN(iso.getTime())) return iso;
   }
   const ymd = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (ymd) {
-    return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]), Number(ymd[4] || 0), Number(ymd[5] || 0), Number(ymd[6] || 0));
+    return new Date(`${ymd[1]}-${ymd[2]}-${ymd[3]}T${pad2(ymd[4] || 0)}:${pad2(ymd[5] || 0)}:${pad2(ymd[6] || 0)}+05:00`);
   }
   const dmy = str.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (dmy) {
-    return new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]), Number(dmy[4] || 0), Number(dmy[5] || 0), Number(dmy[6] || 0));
+    return new Date(`${dmy[3]}-${pad2(dmy[2])}-${pad2(dmy[1])}T${pad2(dmy[4] || 0)}:${pad2(dmy[5] || 0)}:${pad2(dmy[6] || 0)}+05:00`);
   }
   const fallback = new Date(str);
   return Number.isNaN(fallback.getTime()) ? null : fallback;
@@ -123,7 +147,7 @@ export function parseAnyDate(value) {
 export function formatDate(value) {
   const d = parseAnyDate(value);
   if (!d) return "";
-  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
+  return tashkentParts(d, false);
 }
 
 export function formatDateTime(value) {
@@ -131,15 +155,14 @@ export function formatDateTime(value) {
   const d = parseAnyDate(value);
   if (!d) return "—";
   const hasTime = /T\d|\d{1,2}:\d{2}/.test(String(value)) || (d.getHours() !== 0 || d.getMinutes() !== 0);
-  const date = `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
-  if (!hasTime) return date;
-  return `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return tashkentParts(d, hasTime);
 }
 
 export function toISODate(value) {
-  const d = parseAnyDate(value);
-  if (!d) return "";
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const formatted = formatDate(value);
+  if (!formatted) return "";
+  const [dd, mm, yyyy] = formatted.split("/");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export function toDashDate(value) {
@@ -1266,6 +1289,11 @@ export function OrderView({ id, user, go, backTo }) {
           </div>
         ))}
       </div>
+      {(role === "ADMIN" || role === "DELIVERER") && (
+        <button type="button" className="btn secondary" style={{ marginBottom: 8 }} onClick={() => openOrderPrint(order)}>
+          Chop etish
+        </button>
+      )}
       {delivererActions.length > 0 && (
         <div className="stack" style={{ marginBottom: 8 }}>
           {delivererActions.map((a) => (
