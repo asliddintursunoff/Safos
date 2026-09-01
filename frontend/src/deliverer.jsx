@@ -16,7 +16,13 @@ import {
   geoErrorMessage,
   orderStatusMeta,
   personName,
+  formatDate,
   formatDateTime,
+  formatUzPhone,
+  parseAnyDate,
+  toISODate,
+  DatePicker,
+  PhoneInput,
   statusMeta,
   takenByLabel,
   deliveredByLabel,
@@ -33,76 +39,26 @@ const TABS = [
   ["/transactions", "Tranzaksiyalar", "💰"],
 ];
 
-const ADMIN_TABS = [...TABS, ["/products", "Mahsulotlar", "🛒"], ["/users", "Xodimlar", "👥"]];
+const ADMIN_PRIMARY_TABS = [
+  ["/", "Bugun", "📦"],
+  ["/markets", "Do'konlar", "🏪"],
+  ["/pending", "Tasdiq", "⏳"],
+  ["/history", "Tarix", "📋"],
+];
 
-function formatDisplayDate(value) {
-  if (!value) return "";
-  const str = String(value).trim();
-  const iso = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
-  const slash = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (slash) {
-    const dd = String(Number(slash[1])).padStart(2, "0");
-    const mm = String(Number(slash[2])).padStart(2, "0");
-    return `${dd}/${mm}/${slash[3]}`;
-  }
-  const dash = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-  if (dash) {
-    const dd = String(Number(dash[1])).padStart(2, "0");
-    const mm = String(Number(dash[2])).padStart(2, "0");
-    return `${dd}/${mm}/${dash[3]}`;
-  }
-  return str;
-}
-
-function parseDisplayDate(value) {
-  if (!value) return "";
-  const str = String(value).trim();
-  const match = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (!match) return "";
-  const day = Number(match[1]);
-  const month = Number(match[2]);
-  const year = Number(match[3]);
-  if (!year || !month || !day) return "";
-  const d = new Date(year, month - 1, day);
-  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return "";
-  return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
-}
-
-function toISODateFromDisplay(value) {
-  const display = parseDisplayDate(value);
-  if (!display) return "";
-  const [dd, mm, yyyy] = display.split("/");
-  return `${yyyy}-${mm}-${dd}`;
-}
+const ADMIN_MORE_ITEMS = [
+  ["/map", "Xarita", "🗺️"],
+  ["/transactions", "Tranzaksiyalar", "💰"],
+  ["/products", "Mahsulotlar", "🛒"],
+  ["/users", "Xodimlar", "👥"],
+];
 
 function toOrderBackendDate(value) {
-  const parsed = parseDisplayDate(value);
-  if (!parsed) return "";
-  const [dd, mm, yyyy] = parsed.split("/");
-  return `${yyyy}-${mm}-${dd}`;
+  return toISODate(value);
 }
 
 function toPaymentBackendDate(value) {
-  return parseDisplayDate(value) || "";
-}
-
-function DateField({ label, value, onChange }) {
-  return (
-    <div style={{ flex: 1, minWidth: 130 }}>
-      {label && <label className="muted" style={{ display: "block", marginBottom: 4 }}>{label}</label>}
-      <input
-        type="text"
-        value={value || ""}
-        placeholder="dd/mm/yyyy"
-        inputMode="numeric"
-        autoComplete="off"
-        onChange={(e) => onChange(formatDisplayDate(e.target.value))}
-        style={{ width: "100%" }}
-        aria-label={label || "Date"}
-      />
-    </div>
-  );
+  return formatDate(value);
 }
 
 function nearestOrder(start, points) {
@@ -245,7 +201,7 @@ function TodayScreen({ go }) {
               <b>{o.markent_name}</b>
               <span className="badge" style={{ background: meta.color }}>{o.status}</span>
             </div>
-            <div className="muted">{o.created_at} · {money(o.total_price_with_discount)}</div>
+            <div className="muted">{formatDateTime(o.created_at)} · {money(o.total_price_with_discount)}</div>
             {takenByLabel(o) && <div className="muted">Olgan: {takenByLabel(o)}</div>}
             {deliveredByLabel(o) && <div className="muted">Yetkazgan: {deliveredByLabel(o)}</div>}
           </div>
@@ -773,7 +729,7 @@ function MarketDebtOrdersScreen({ marketId, go }) {
             style={{ cursor: "pointer" }}
           >
             <div className="row">
-              <b>{o.created_at}</b>
+              <b>{formatDateTime(o.created_at)}</b>
               <span className="badge" style={{ background: orderStatusMeta(o.status_code || o.status, o.status).color }}>
                 Qarz
               </span>
@@ -901,7 +857,7 @@ function PendingScreen({ go }) {
                   <b>{o.markent_name}</b>
                   <span className="badge" style={{ background: meta.color }}>{o.status}</span>
                 </div>
-                <div className="muted">{o.created_at} · {money(o.total_price_with_discount)}</div>
+                <div className="muted">{formatDateTime(o.created_at)} · {money(o.total_price_with_discount)}</div>
                 {taken && <div className="muted">Olgan: {taken}</div>}
                 {deliveredByLabel(o) && <div className="muted">Yetkazgan: {deliveredByLabel(o)}</div>}
               </div>
@@ -966,7 +922,7 @@ function HistoryScreen({ go }) {
           value={marketQuery}
           onChange={(e) => setMarketQuery(e.target.value)}
         />
-        <DateField value={dateQuery} onChange={setDateQuery} />
+        <DatePicker value={dateQuery} onChange={setDateQuery} />
         <button type="submit" className="btn secondary" disabled={busy}>{busy ? "Qidirilmoqda..." : "Qidirish"}</button>
       </form>
       <ErrorText error={error} />
@@ -1050,7 +1006,7 @@ function TransactionsScreen({ go }) {
           value={marketQuery}
           onChange={(e) => setMarketQuery(e.target.value)}
         />
-        <DateField value={dateQuery} onChange={setDateQuery} />
+        <DatePicker value={dateQuery} onChange={setDateQuery} />
         <button type="submit" className="btn secondary" disabled={busy}>{busy ? "Qidirilmoqda..." : "Qidirish"}</button>
       </form>
       <ErrorText error={error} />
@@ -1060,7 +1016,7 @@ function TransactionsScreen({ go }) {
         return (
           <div className="card" key={day} style={{ marginTop: 12 }}>
             <div className="row">
-              <b>{new Date(`${day}T00:00:00`).toLocaleDateString("uz-UZ", { day: "2-digit", month: "2-digit", year: "numeric" })}</b>
+              <b>{formatDate(day)}</b>
               <b>{money(dayTotal)}</b>
             </div>
             {dayRows.map((tx) => (
@@ -1071,7 +1027,7 @@ function TransactionsScreen({ go }) {
                 </div>
                 <div className="muted">
                   {tx.taken_by ? `${personName(tx.taken_by)} · ` : ""}
-                  {new Date(tx.payment_date).toLocaleString("uz-UZ", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  {formatDateTime(tx.payment_date)}
                 </div>
               </div>
             ))}
@@ -1159,9 +1115,8 @@ function MarketStatisticsScreen({ go, compact = false }) {
               if (!debtOrders.length || debtTotal <= 0) return null;
               const dates = debtOrders
                 .map((item) => item.created_at || item.payment_date || item.updated_at)
-                .filter(Boolean)
-                .map((value) => new Date(value))
-                .filter((date) => !Number.isNaN(date.getTime()));
+                .map((value) => parseAnyDate(value))
+                .filter(Boolean);
               const oldestDate = dates.length ? new Date(Math.min(...dates.map((date) => date.getTime()))) : null;
               return {
                 id: market.id,
@@ -1278,7 +1233,7 @@ function MarketStatisticsScreen({ go, compact = false }) {
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 800, lineHeight: 1.3 }}>{m.name}</div>
                 <div className="muted" style={{ fontSize: 12 }}>
-                  {m.debt_date ? new Date(m.debt_date).toLocaleDateString('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
+                  {m.debt_date ? formatDate(m.debt_date) : '—'}
                 </div>
               </div>
               <div style={{ textAlign: 'right', fontWeight: 700 }}>{money(m.debt_total)}</div>
@@ -1331,22 +1286,22 @@ function MarketStatisticsScreen({ go, compact = false }) {
         </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button className="btn secondary" onClick={() => load()} disabled={busy} style={{ flex: '1 1 120px', minWidth: 110, padding: '10px 12px', fontSize: 13 }}>{busy ? 'Yuklanmoqda...' : 'Filtrlash'}</button>
-          <button className="btn ghost" onClick={() => { setSearch(''); setInactiveDays(''); setHasDebt(false); setOrdering('-days_since_last_order'); sessionStorage.removeItem('market-statistics-filters'); load(); }} style={{ flex: '0 0 auto', minWidth: 92, padding: '10px 12px', fontSize: 13 }}>Tozalash</button>
+          <button className="btn secondary small" onClick={() => load()} disabled={busy} style={{ flex: 1 }}>{busy ? 'Yuklanmoqda...' : 'Filtrlash'}</button>
+          <button className="btn ghost small" onClick={() => { setSearch(''); setInactiveDays(''); setHasDebt(false); setOrdering('-days_since_last_order'); sessionStorage.removeItem('market-statistics-filters'); load(); }}>Tozalash</button>
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', paddingTop: 4 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: '#334155' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#334155' }}>
             <input type="checkbox" checked={selectAll} onChange={toggleAll} />
             Hammasini tanlash
           </label>
-          <select value={statusChoice} onChange={(e) => setStatusChoice(e.target.value)} style={{ flex: '1 1 180px', minWidth: 150 }}>
+          <select value={statusChoice} onChange={(e) => setStatusChoice(e.target.value)} style={{ flex: '1 1 140px', minWidth: 0 }}>
             <option value="AVAILABLE">Mahsulotlar mavjud</option>
             <option value="POSSIBLE">Mahsulot kerak bo'lishi mumkin</option>
             <option value="NOT_NEEDED">Mahsulot kerak bo'lmasligi mumkin</option>
           </select>
-          <button className="btn" onClick={bulkUpdateStatus} disabled={busy || selected.size===0} style={{ flex: '1 1 180px', minWidth: 150, padding: '10px 12px', fontSize: 13 }}>Tanlanganlarni yangilash</button>
-          <button className="btn ghost" onClick={() => setSelected(new Set())} disabled={busy || selected.size===0} style={{ flex: '0 0 auto', minWidth: 110, padding: '10px 12px', fontSize: 13 }}>Tanlovni tozalash</button>
+          <button className="btn small" onClick={bulkUpdateStatus} disabled={busy || selected.size===0} style={{ flex: 1 }}>Tanlanganlarni yangilash</button>
+          <button className="btn ghost small" onClick={() => setSelected(new Set())} disabled={busy || selected.size===0}>Tanlovni tozalash</button>
         </div>
       </div>
 
@@ -1570,12 +1525,10 @@ function ProductsScreen({ go }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "0 12px 8px" }}>
-        <div style={{ flex: 1 }}><ScreenHeader title="Mahsulotlar" backTo="#/" go={go} /></div>
-        <div className="row" style={{ gap: 8 }}>
-          <button type="button" className="btn secondary" onClick={() => openCategoryModal()} style={{ minWidth: 110, padding: "7px 10px", fontSize: 13 }}>Kategoriya</button>
-          <button type="button" className="btn" onClick={() => openProductModal()} style={{ minWidth: 110, padding: "7px 10px", fontSize: 13 }}>Mahsulot</button>
-        </div>
+      <div className="page-actions">
+        <ScreenHeader title="Mahsulotlar" backTo="#/" go={go} />
+        <button type="button" className="btn secondary small" onClick={() => openCategoryModal()}>Kategoriya</button>
+        <button type="button" className="btn small" onClick={() => openProductModal()}>Mahsulot</button>
       </div>
 
       <ErrorText error={error} />
@@ -1588,13 +1541,13 @@ function ProductsScreen({ go }) {
               <div className="muted" style={{ fontSize: 12 }}>{(category.products || []).length} ta mahsulot</div>
             </div>
             <div className="row" style={{ gap: 6 }}>
-              <button type="button" className="btn secondary" onClick={() => openCategoryModal(category)} style={{ minWidth: 78, padding: "7px 10px", fontSize: 12 }}>Tahrirlash</button>
-              <button type="button" className="btn danger" onClick={() => deleteCategory(category.id)} style={{ minWidth: 78, padding: "7px 10px", fontSize: 12 }}>O'chirish</button>
+              <button type="button" className="btn secondary small" onClick={() => openCategoryModal(category)}>Tahrirlash</button>
+              <button type="button" className="btn danger small" onClick={() => deleteCategory(category.id)}>O'chirish</button>
             </div>
           </div>
 
           {(category.products || []).length ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10, marginTop: 12 }}>
+            <div className="product-grid">
               {(category.products || []).map((product) => (
                 <div key={product.id} style={{ border: "1px solid rgba(148,163,184,0.25)", borderRadius: 12, padding: 10, background: "rgba(255,255,255,0.6)" }}>
                   <div className="row" style={{ alignItems: "center", gap: 8 }}>
@@ -1618,8 +1571,8 @@ function ProductsScreen({ go }) {
                     <b style={{ fontSize: 13 }}>{product.value} {unitLabel(product.unit)}</b>
                   </div>
                   <div className="row" style={{ gap: 6, justifyContent: "flex-end", marginTop: 8 }}>
-                    <button type="button" className="btn secondary" onClick={() => openProductModal(product)} style={{ minWidth: 72, padding: "6px 8px", fontSize: 11 }}>Tahrirlash</button>
-                    <button type="button" className="btn danger" onClick={() => deleteProduct(product.id)} style={{ minWidth: 72, padding: "6px 8px", fontSize: 11 }}>O'chirish</button>
+                    <button type="button" className="btn secondary small" onClick={() => openProductModal(product)}>Tahrirlash</button>
+                    <button type="button" className="btn danger small" onClick={() => deleteProduct(product.id)}>O'chirish</button>
                   </div>
                 </div>
               ))}
@@ -1710,7 +1663,7 @@ function WorkerManagementScreen({ go }) {
   const [form, setForm] = useState({
     first_name: "",
     last_name: "",
-    phone_number: "",
+    phone_number: "+998",
     role_type: "DELIVERER",
     password: "",
   });
@@ -1733,13 +1686,6 @@ function WorkerManagementScreen({ go }) {
 
   useEffect(() => { load(); }, []);
 
-  function applyPhone(raw) {
-    const digits = String(raw || "").replace(/\D/g, "");
-    if (digits.startsWith("998")) return "+" + digits;
-    if (digits.length === 9) return "+998" + digits;
-    return raw || "";
-  }
-
   function onChange(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
@@ -1749,34 +1695,32 @@ function WorkerManagementScreen({ go }) {
     setForm({
       first_name: "",
       last_name: "",
-      phone_number: "",
+      phone_number: "+998",
       role_type: "DELIVERER",
       password: "",
     });
   }
 
   async function loadWorkerStats() {
-    // Use backend worker-stats API to avoid client-side aggregation errors
     let start = statsStart;
     let end = statsEnd;
     if (statsToday) {
-      const todayIso = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      const display = formatDisplayDate(todayIso);
+      const display = formatDate(new Date());
       start = display;
       end = display;
       setStatsStart(display);
       setStatsEnd(display);
     }
 
-    const startValue = parseDisplayDate(start);
-    const endValue = parseDisplayDate(end);
+    const startValue = formatDate(start);
+    const endValue = formatDate(end);
     if (!startValue || !endValue) {
       setStatsError("Boshlang'ich va tugash sanasi kerak. Format: dd/mm/yyyy");
       return;
     }
 
-    const startDate = new Date(`${startValue.split('/')[2]}-${startValue.split('/')[1]}-${startValue.split('/')[0]}`);
-    const endDate = new Date(`${endValue.split('/')[2]}-${endValue.split('/')[1]}-${endValue.split('/')[0]}`);
+    const startDate = parseAnyDate(startValue);
+    const endDate = parseAnyDate(endValue);
     if (startDate > endDate) {
       setStatsError("Boshlang'ich sana tugash sanadan keyin bo'lishi mumkin emas");
       return;
@@ -1818,11 +1762,12 @@ function WorkerManagementScreen({ go }) {
   }
 
   function openEdit(user) {
+    setError("");
     setEditingId(user.id);
     setForm({
-      first_name: "",
-      last_name: "",
-      phone_number: "",
+      first_name: user.first_name || "",
+      last_name: user.last_name || "",
+      phone_number: formatUzPhone(user.phone_number),
       role_type: user.role_type || "DELIVERER",
       password: "",
     });
@@ -1836,7 +1781,7 @@ function WorkerManagementScreen({ go }) {
 
   async function submit(e) {
     e.preventDefault();
-    if (!form.phone_number.trim()) {
+    if (formatUzPhone(form.phone_number).length !== 13) {
       setError("Telefon raqami kerak");
       return;
     }
@@ -1850,7 +1795,7 @@ function WorkerManagementScreen({ go }) {
       const payload = {
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
-        phone_number: applyPhone(form.phone_number),
+        phone_number: formatUzPhone(form.phone_number),
         role_type: form.role_type,
         ...(form.password ? { password: form.password } : {}),
       };
@@ -1887,10 +1832,10 @@ function WorkerManagementScreen({ go }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 12px 8px", gap: 8 }}>
-        <div style={{ flex: 1 }}><ScreenHeader title="Xodimlar" backTo="#/" go={go} /></div>
-        <button type="button" className="btn secondary" onClick={() => { const todayIso = new Date().toISOString().slice(0,10); const todayDisplay = formatDisplayDate(todayIso); setStatsStart(todayDisplay); setStatsEnd(todayDisplay); setStatsToday(true); setStatsOpen(true); setTimeout(loadWorkerStats, 0); }} style={{ minWidth: 92, padding: "7px 10px", fontSize: 13 }}>Statistika</button>
-        <button type="button" className="btn" onClick={openCreate} aria-label="Yangi xodim qo'shish" style={{ minWidth: 46, fontSize: 22, lineHeight: 1, padding: "6px 10px" }}>＋</button>
+      <div className="page-actions">
+        <ScreenHeader title="Xodimlar" backTo="#/" go={go} />
+        <button type="button" className="btn secondary small" onClick={() => { const todayDisplay = formatDate(new Date()); setStatsStart(todayDisplay); setStatsEnd(todayDisplay); setStatsToday(true); setStatsOpen(true); setTimeout(loadWorkerStats, 0); }}>Statistika</button>
+        <button type="button" className="btn small" onClick={openCreate} aria-label="Yangi xodim qo'shish">＋</button>
       </div>
 
       <div className="card" style={{ marginBottom: 10 }}>
@@ -1927,7 +1872,7 @@ function WorkerManagementScreen({ go }) {
               </div>
               <div className="muted">{user.phone_number || "Telefon yo'q"}</div>
             </div>
-            <button type="button" className="btn secondary" onClick={() => openEdit(user)}>{busy ? "..." : "Tahrirlash"}</button>
+            <button type="button" className="btn secondary small" onClick={() => openEdit(user)}>{busy ? "..." : "Tahrirlash"}</button>
           </div>
         </div>
       ))}
@@ -1955,8 +1900,8 @@ function WorkerManagementScreen({ go }) {
 
                   {!statsToday && (
                     <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                      <DateField label="Boshlanish" value={statsStart} onChange={setStatsStart} />
-                      <DateField label="Tugash" value={statsEnd} onChange={setStatsEnd} />
+                      <DatePicker label="Boshlanish" value={statsStart} onChange={setStatsStart} />
+                      <DatePicker label="Tugash" value={statsEnd} onChange={setStatsEnd} />
                     </div>
                   )}
 
@@ -2036,7 +1981,7 @@ function WorkerManagementScreen({ go }) {
                   <input value={form.last_name} onChange={(e) => onChange("last_name", e.target.value)} placeholder="Familiya" style={{ width: "100%" }} />
                 </div>
               </div>
-              <input value={form.phone_number} onChange={(e) => onChange("phone_number", e.target.value)} placeholder="+998901234567" inputMode="tel" style={{ width: "100%" }} />
+              <PhoneInput value={form.phone_number} onChange={(v) => onChange("phone_number", v)} />
               <select value={form.role_type} onChange={(e) => onChange("role_type", e.target.value)} style={{ width: "100%" }}>
                 <option value="DELIVERER">Yetkazuvchi</option>
                 <option value="AGENT">Agent</option>
@@ -2056,7 +2001,44 @@ function WorkerManagementScreen({ go }) {
   );
 }
 
+function tabIsActive(href, path) {
+  if (href === "/") return path === "/" || path === "/near";
+  if (href === "/markets") return path === "/markets" || (path.startsWith("/markets") && path !== "/markets/statistics");
+  if (href === "/pending") return path === "/pending" || (path.startsWith("/orders") && lastBack("#/") === "#/pending");
+  if (href === "/history") return path === "/history" || (path.startsWith("/orders") && lastBack("#/") === "#/history");
+  if (href === "/transactions") return path === "/transactions";
+  if (href === "/products") return path === "/products";
+  if (href === "/users") return path === "/users";
+  return path === href;
+}
+
+function MoreSheet({ open, items, path, go, onClose }) {
+  if (!open) return null;
+  return (
+    <>
+      <button type="button" className="more-backdrop" aria-label="Yopish" onClick={onClose} />
+      <div className="more-sheet" role="menu">
+        {items.map(([href, label, icon]) => (
+          <button
+            key={href}
+            type="button"
+            role="menuitem"
+            className={`more-item ${tabIsActive(href, path) ? "active" : ""}`}
+            onClick={() => { go(`#${href}`); onClose(); }}
+          >
+            <i>{icon}</i>
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export function DelivererApp({ user, path, parts, go, logout, admin = false }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => { setMoreOpen(false); }, [path]);
+
   let screen = <TodayScreen go={go} />;
   if (path === "/near") screen = <NearWaysScreen go={go} />;
   else if (path === "/markets/statistics") screen = <MarketStatisticsScreen go={go} compact={!admin} />;
@@ -2112,37 +2094,42 @@ export function DelivererApp({ user, path, parts, go, logout, admin = false }) {
     "/products": "Mahsulotlar",
     "/users": "Xodimlar",
   };
-  const tabs = admin ? ADMIN_TABS : TABS;
+  const tabs = admin ? ADMIN_PRIMARY_TABS : TABS;
+  const moreActive = admin && ADMIN_MORE_ITEMS.some(([href]) => tabIsActive(href, path));
 
   return (
-    <div className="app">
+    <div className={`app ${admin ? "admin-app" : ""}`}>
       {!nested && (
         <TopBar title={titles[path] || "Safos"} subtitle={user.first_name || "Yetkazuvchi"} go={go} />
       )}
       {screen}
+      {admin && (
+        <MoreSheet
+          open={moreOpen}
+          items={ADMIN_MORE_ITEMS}
+          path={path}
+          go={go}
+          onClose={() => setMoreOpen(false)}
+        />
+      )}
       <nav className="tabs">
-        {tabs.map(([href, label, icon]) => {
-          const active = href === "/"
-            ? path === "/" || path === "/near"
-            : href === "/markets"
-              ? path === "/markets" || (path.startsWith("/markets") && path !== "/markets/statistics")
-              : href === "/pending"
-                ? path === "/pending" || (path.startsWith("/orders") && lastBack("#/") === "#/pending")
-                : href === "/history"
-                  ? path === "/history" || (path.startsWith("/orders") && lastBack("#/") === "#/history")
-                  : href === "/transactions"
-                    ? path === "/transactions"
-                    : href === "/products"
-                      ? path === "/products"
-                      : href === "/users"
-                        ? path === "/users"
-                        : path === href;
-          return (
-            <a key={href} className={`tab ${active ? "active" : ""}`} href={`#${href}`}>
-              <i>{icon}</i>{label}
-            </a>
-          );
-        })}
+        {tabs.map(([href, label, icon]) => (
+          <a key={href} className={`tab ${tabIsActive(href, path) ? "active" : ""}`} href={`#${href}`}>
+            <i>{icon}</i>{label}
+          </a>
+        ))}
+        {admin && (
+          <button
+            type="button"
+            className={`tab more-tab ${moreActive || moreOpen ? "active" : ""}`}
+            aria-label="Yana"
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen((open) => !open)}
+          >
+            <i className="hamburger" aria-hidden="true"><span /><span /><span /></i>
+            Yana
+          </button>
+        )}
       </nav>
     </div>
   );

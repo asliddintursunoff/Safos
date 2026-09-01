@@ -68,62 +68,115 @@ export function personName(p) {
   return `${p.first_name || ""} ${p.last_name || ""}`.trim();
 }
 
-function formatDisplayDate(value) {
-  if (!value) return "";
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+export function parseAnyDate(value) {
+  if (!value && value !== 0) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   const str = String(value).trim();
-  const iso = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
-  const slash = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (slash) {
-    const dd = String(Number(slash[1])).padStart(2, "0");
-    const mm = String(Number(slash[2])).padStart(2, "0");
-    return `${dd}/${mm}/${slash[3]}`;
+  if (!str) return null;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(str) || /Z$/.test(str)) {
+    const iso = new Date(str);
+    if (!Number.isNaN(iso.getTime())) return iso;
   }
-  const dash = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-  if (dash) {
-    const dd = String(Number(dash[1])).padStart(2, "0");
-    const mm = String(Number(dash[2])).padStart(2, "0");
-    return `${dd}/${mm}/${dash[3]}`;
+  const ymd = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (ymd) {
+    return new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]), Number(ymd[4] || 0), Number(ymd[5] || 0), Number(ymd[6] || 0));
   }
-  return str;
+  const dmy = str.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (dmy) {
+    return new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]), Number(dmy[4] || 0), Number(dmy[5] || 0), Number(dmy[6] || 0));
+  }
+  const fallback = new Date(str);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
 }
 
-function parseDisplayDate(value) {
-  if (!value) return "";
-  const str = String(value).trim();
-  const match = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (!match) return "";
-  const day = Number(match[1]);
-  const month = Number(match[2]);
-  const year = Number(match[3]);
-  if (!year || !month || !day) return "";
-  const d = new Date(year, month - 1, day);
-  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return "";
-  return `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`;
+export function formatDate(value) {
+  const d = parseAnyDate(value);
+  if (!d) return "";
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
 
-function toISODateFromDisplay(value) {
-  const display = parseDisplayDate(value);
-  if (!display) return "";
-  const [dd, mm, yyyy] = display.split("/");
-  return `${yyyy}-${mm}-${dd}`;
+export function formatDateTime(value) {
+  if (!value) return "—";
+  const d = parseAnyDate(value);
+  if (!d) return "—";
+  const hasTime = /T\d|\d{1,2}:\d{2}/.test(String(value)) || (d.getHours() !== 0 || d.getMinutes() !== 0);
+  const date = `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
+  if (!hasTime) return date;
+  return `${date} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
-export function DateInput({ label, value, onChange, placeholder = "dd/mm/yyyy" }) {
+export function toISODate(value) {
+  const d = parseAnyDate(value);
+  if (!d) return "";
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+export function toDashDate(value) {
+  const formatted = formatDate(value);
+  return formatted ? formatted.replace(/\//g, "-") : "";
+}
+
+export function DatePicker({ label, value, onChange }) {
+  const iso = toISODate(value);
+  const shown = formatDate(value);
   return (
-    <div style={{ width: "100%" }}>
-      {label && <label className="muted" style={{ display: "block", marginBottom: 4 }}>{label}</label>}
-      <input
-        type="text"
-        value={value || ""}
-        placeholder={placeholder}
-        inputMode="numeric"
-        autoComplete="off"
-        onChange={(e) => onChange(formatDisplayDate(e.target.value))}
-        style={{ width: "100%" }}
-        aria-label={label || "Date"}
-      />
-    </div>
+    <label className="date-picker">
+      {label && <span className="muted">{label}</span>}
+      <span className="date-picker-field">
+        <span className={`date-value ${shown ? "" : "empty"}`}>{shown || "dd/mm/yyyy"}</span>
+        <span className="date-icon" aria-hidden="true">📅</span>
+        <input
+          type="date"
+          lang="en-GB"
+          value={iso}
+          onChange={(e) => onChange(e.target.value ? formatDate(e.target.value) : "")}
+          aria-label={label || "Sana"}
+        />
+      </span>
+    </label>
+  );
+}
+
+export function DateInput(props) {
+  return <DatePicker {...props} />;
+}
+
+const PHONE_PREFIX = "+998";
+
+export function formatUzPhone(raw) {
+  let digits = String(raw || "").replace(/\D/g, "");
+  if (digits.startsWith("998")) digits = digits.slice(3);
+  return PHONE_PREFIX + digits.slice(0, 9);
+}
+
+export function PhoneInput({ value, onChange, placeholder = "+998901234567", ...props }) {
+  const display = formatUzPhone(value || PHONE_PREFIX);
+  return (
+    <input
+      type="tel"
+      inputMode="tel"
+      autoComplete="tel"
+      value={display}
+      placeholder={placeholder}
+      onChange={(e) => onChange(formatUzPhone(e.target.value))}
+      onFocus={(e) => {
+        if (!value) onChange(PHONE_PREFIX);
+        const el = e.target;
+        requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
+      }}
+      onKeyDown={(e) => {
+        const start = e.target.selectionStart ?? 0;
+        const end = e.target.selectionEnd ?? 0;
+        if ((e.key === "Backspace" || e.key === "Delete") && start <= 4 && end <= 4) {
+          e.preventDefault();
+        }
+      }}
+      {...props}
+    />
   );
 }
 
@@ -192,13 +245,7 @@ export function InfoRows({ title, rows }) {
   );
 }
 
-export function formatDateTime(iso) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+
 
 export function distMeters(a, b) {
   const R = 6371000;
@@ -257,16 +304,13 @@ export function TopBar({ title, subtitle, go }) {
 }
 
 export function Login({ onLogin }) {
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState("+998");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   function applyPhone(raw) {
-    const digits = String(raw || "").replace(/\D/g, "");
-    if (digits.startsWith("998")) setPhone("+" + digits);
-    else if (digits.length === 9) setPhone("+998" + digits);
-    else setPhone(raw);
+    setPhone(formatUzPhone(raw));
   }
 
   useEffect(() => {
@@ -299,7 +343,7 @@ export function Login({ onLogin }) {
       <h1 className="h1">Safos</h1>
       <p className="muted">Xodim kabineti</p>
       <form className="card stack" onSubmit={submit}>
-        <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+998901234567" inputMode="tel" />
+        <PhoneInput value={phone} onChange={setPhone} />
         {tg?.requestContact && (
           <button type="button" className="btn secondary" onClick={() => tg.requestContact()}>
             Kontakt yuborish
@@ -397,7 +441,7 @@ export function MarketsScreen({ go, user }) {
 export function NewMarket({ go, backTo = "#/" }) {
   const [form, setForm] = useState({
     name: "", description: "", owner_first_name: "", owner_last_name: "",
-    owner_phone_number: "", discount_percentage: "", latitude: "", longitude: "",
+    owner_phone_number: "+998", discount_percentage: "", latitude: "", longitude: "",
   });
   const [photo, setPhoto] = useState(null);
   const [error, setError] = useState("");
@@ -444,7 +488,7 @@ export function NewMarket({ go, backTo = "#/" }) {
     if (form.description) fd.append("description", form.description);
     if (form.owner_first_name) fd.append("owner_first_name", form.owner_first_name);
     if (form.owner_last_name) fd.append("owner_last_name", form.owner_last_name);
-    if (form.owner_phone_number) fd.append("owner_phone_number", form.owner_phone_number);
+    if (formatUzPhone(form.owner_phone_number).length === 13) fd.append("owner_phone_number", formatUzPhone(form.owner_phone_number));
     if (form.discount_percentage !== "") fd.append("discount_percentage", form.discount_percentage);
     if (form.latitude !== "" && form.longitude !== "") {
       fd.append("latitude", form.latitude);
@@ -466,7 +510,7 @@ export function NewMarket({ go, backTo = "#/" }) {
       <input type="file" accept="image/*" onChange={(e) => setPhoto(e.target.files[0] || null)} />
       <input placeholder="Egasi ismi" value={form.owner_first_name} onChange={(e) => set("owner_first_name", e.target.value)} />
       <input placeholder="Egasi familiyasi" value={form.owner_last_name} onChange={(e) => set("owner_last_name", e.target.value)} />
-      <input placeholder="Egasi telefoni +998..." value={form.owner_phone_number} onChange={(e) => set("owner_phone_number", e.target.value)} />
+      <PhoneInput placeholder="Egasi telefoni" value={form.owner_phone_number} onChange={(v) => set("owner_phone_number", v)} />
       <textarea placeholder="Izoh" value={form.description} onChange={(e) => set("description", e.target.value)} />
       <input placeholder="Chegirma %" type="number" value={form.discount_percentage} onChange={(e) => set("discount_percentage", e.target.value)} />
       <button type="button" className="btn secondary" onClick={currentLocation}>Joriy joylashuv</button>
@@ -771,7 +815,7 @@ export function MyOrdersScreen({ go }) {
       <ErrorText error={error} />
       {groups.map((g) => (
         <div key={g.day}>
-          <div className="date-head">{g.day}</div>
+          <div className="date-head">{formatDate(g.day)}</div>
           <div className="card">
             {g.rows.map((o) => (
               <div className="list-item" key={o.id} onClick={() => { rememberBack("#/orders"); go(`#/orders/${o.id}`); }}>
@@ -779,7 +823,7 @@ export function MyOrdersScreen({ go }) {
                   <b>{o.markent_name}</b>
                   <span className="badge" style={{ background: orderStatusMeta(o.status_code, o.status).color }}>{o.status}</span>
                 </div>
-                <div className="muted">{o.created_at} · {money(o.total_price_with_discount)}</div>
+                <div className="muted">{formatDateTime(o.created_at)} · {money(o.total_price_with_discount)}</div>
                 {takenByLabel(o) && <div className="muted">Olgan: {takenByLabel(o)}</div>}
                 {deliveredByLabel(o) && <div className="muted">Yetkazgan: {deliveredByLabel(o)}</div>}
               </div>
@@ -799,10 +843,8 @@ export function MoneyScreen() {
   const [error, setError] = useState("");
   const [title, setTitle] = useState("Bugun");
 
-  function toApiDate(iso) {
-    if (!iso) return "";
-    const [y, m, d] = iso.split("-");
-    return `${d}-${m}-${y}`;
+  function toApiDate(value) {
+    return toDashDate(value);
   }
 
   async function loadToday() {
@@ -821,7 +863,7 @@ export function MoneyScreen() {
     try {
       const res = await api.myMoney(`?start_date=${toApiDate(start)}&end_date=${toApiDate(end)}`);
       setData(res);
-      setTitle(`${toApiDate(start)} — ${toApiDate(end)}`);
+      setTitle(`${formatDate(start)} — ${formatDate(end)}`);
       setError("");
     } catch (err) {
       setError(err.message);
@@ -839,8 +881,8 @@ export function MoneyScreen() {
       </div>
       <form className="card stack" onSubmit={loadRange}>
         <div className="h2">Sana oralig'i</div>
-        <DateInput label="Boshlanish" value={start} onChange={setStart} />
-        <DateInput label="Tugash" value={end} onChange={setEnd} />
+        <DatePicker label="Boshlanish" value={start} onChange={setStart} />
+        <DatePicker label="Tugash" value={end} onChange={setEnd} />
         <ErrorText error={error} />
         <div className="grid2">
           <button className="btn secondary" type="button" onClick={loadToday}>Bugun</button>
@@ -1135,10 +1177,10 @@ export function OrderView({ id, user, go, backTo }) {
       <InfoRows
         title="Vaqt"
         rows={[
-          ["Yaratilgan", order.created_at],
-          ["Tasdiqlangan", order.approved_at],
-          ["Yetkazilgan", order.delivered_at],
-          ["Bekor qilingan", order.cancelled_at],
+          ["Yaratilgan", order.created_at ? formatDateTime(order.created_at) : ""],
+          ["Tasdiqlangan", order.approved_at ? formatDateTime(order.approved_at) : ""],
+          ["Yetkazilgan", order.delivered_at ? formatDateTime(order.delivered_at) : ""],
+          ["Bekor qilingan", order.cancelled_at ? formatDateTime(order.cancelled_at) : ""],
         ]}
       />
       <div className="card">
@@ -1258,7 +1300,7 @@ function DelivererTransactionsSection({ user }) {
           value={marketQuery}
           onChange={(e) => setMarketQuery(e.target.value)}
         />
-        <DateInput value={dateQuery} onChange={setDateQuery} />
+        <DatePicker value={dateQuery} onChange={setDateQuery} />
         <div className="grid2">
           <button type="submit" className="btn secondary" disabled={busy}>{busy ? "Qidirilmoqda..." : "Qidirish"}</button>
           <button type="button" className="btn ghost" onClick={resetFilters}>Tozalash</button>
@@ -1271,7 +1313,7 @@ function DelivererTransactionsSection({ user }) {
         return (
           <div className="card" key={day} style={{ marginTop: 12 }}>
             <div className="row">
-              <b>{new Date(`${day}T00:00:00`).toLocaleDateString("uz-UZ", { day: "2-digit", month: "2-digit", year: "numeric" })}</b>
+              <b>{formatDate(day)}</b>
               <b>{money(dayTotal)}</b>
             </div>
             {dayRows.map((tx) => (
@@ -1280,7 +1322,7 @@ function DelivererTransactionsSection({ user }) {
                   <span>{tx.market_name || "Do'kon"}</span>
                   <b>{money(tx.amount)}</b>
                 </div>
-                <div className="muted">{new Date(tx.payment_date).toLocaleString("uz-UZ", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                <div className="muted">{formatDateTime(tx.payment_date)}</div>
               </div>
             ))}
           </div>
@@ -1411,7 +1453,7 @@ export function OrderListCard({ items, go, from, empty = "Buyurtma yo'q" }) {
     <div>
       {groups.map((g) => (
         <div key={g.day}>
-          <div className="date-head">{g.day}</div>
+          <div className="date-head">{formatDate(g.day)}</div>
           <div className="card">
             {g.rows.map((o) => {
               const meta = orderStatusMeta(o.status_code, o.status);
@@ -1425,7 +1467,7 @@ export function OrderListCard({ items, go, from, empty = "Buyurtma yo'q" }) {
                     <b>{o.markent_name}</b>
                     <span className="badge" style={{ background: meta.color }}>{o.status}</span>
                   </div>
-                  <div className="muted">{o.created_at} · {money(o.total_price_with_discount)}</div>
+                  <div className="muted">{formatDateTime(o.created_at)} · {money(o.total_price_with_discount)}</div>
                   {takenByLabel(o) && <div className="muted">Olgan: {takenByLabel(o)}</div>}
                   {deliveredByLabel(o) && <div className="muted">Yetkazgan: {deliveredByLabel(o)}</div>}
                 </div>
