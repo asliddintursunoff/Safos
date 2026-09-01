@@ -32,7 +32,10 @@ SECRET_KEY = env(
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env("DJANGO_DEBUG", "true").lower() in ("1", "true", "yes")
+DEBUG = env(
+    "DJANGO_DEBUG",
+    "false" if env("RAILWAY_ENVIRONMENT") else "true",
+).lower() in ("1", "true", "yes")
 
 ALLOWED_HOSTS = [
     host.strip()
@@ -63,14 +66,15 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'django_filters',
     "nested_admin",
+    "storages",
     
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    "whitenoise.middleware.WhiteNoiseMiddleware",
-    'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.gzip.GZipMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -109,6 +113,8 @@ DATABASES = {
         'PASSWORD': env("POSTGRES_PASSWORD", "Official123"),
         'HOST': env("POSTGRES_HOST", "127.0.0.1"),
         'PORT': env("POSTGRES_PORT", "5432"),
+        'CONN_MAX_AGE': int(env("CONN_MAX_AGE", "60")),
+        'CONN_HEALTH_CHECKS': True,
     }
 }
 
@@ -151,10 +157,10 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
     "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "BACKEND": "storages.backends.s3.S3Storage",
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
 }
 
@@ -201,14 +207,19 @@ REST_FRAMEWORK = {
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in env(
-        "CORS_ALLOWED_ORIGINS"
-        
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173",
     ).split(",")
     if origin.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
+CORS_PREFLIGHT_MAX_AGE = 60 * 60 * 24
+CSRF_TRUSTED_ORIGINS = list(CORS_ALLOWED_ORIGINS)
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Your Project API',
@@ -230,3 +241,19 @@ SIMPLE_JWT = {
 TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", "")
 
 
+
+
+
+
+AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
+
+AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME")
+
+AWS_S3_REGION_NAME = os.environ.get("AWS_S3_REGION_NAME")
+
+AWS_S3_CUSTOM_DOMAIN = os.environ.get("AWS_S3_CUSTOM_DOMAIN")
+
+AWS_S3_FILE_OVERWRITE = False
+AWS_DEFAULT_ACL = None
+AWS_QUERYSTRING_AUTH = False

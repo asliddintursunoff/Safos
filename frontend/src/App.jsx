@@ -67,8 +67,9 @@ function AgentApp({ user, path, parts, go, logout }) {
 
 export default function App() {
   const { path, parts, go } = useRoute();
-  const [user, setUser] = useState(getStoredUser());
-  const [boot, setBoot] = useState(!!getStoredUser());
+  const storedUser = getStoredUser();
+  const [user, setUser] = useState(storedUser);
+  const [boot, setBoot] = useState(!storedUser && !!getRefresh());
 
   useEffect(() => {
     if (!getRefresh()) {

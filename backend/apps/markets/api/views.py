@@ -25,10 +25,9 @@ class MarketListCreateAPIView(ListCreateAPIView):
     def get_queryset(self):
         queryset = Market.objects.select_related(
             "statuses",
-            "owner",
             "statuses__last_order",
             "statuses__last_order__ordered_by",
-        )
+        ).defer("description")
         user = self.request.user
         if getattr(user, "role_type", None) == "CUSTOMER":
             queryset = queryset.filter(owner=user)
