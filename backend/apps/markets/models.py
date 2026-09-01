@@ -1,6 +1,7 @@
 from django.contrib.gis.db import models
 from apps.common.models import BaseModel
 from apps.common.choices import MARKET_STATUS_CHOICES, MARKET_COLOR_CHOICES
+from apps.common.images import optimize_image_field
 
 
 class Market(BaseModel):
@@ -17,6 +18,7 @@ class Market(BaseModel):
     def save(self, *args, **kwargs):
         if self.discount_percentage < 0 or self.discount_percentage > 100:
             raise ValueError("Discount percentage must be between 0 and 100.")
+        optimize_image_field(self, "image", max_side=1280, quality=78)
         super().save(*args, **kwargs)
     def __str__(self):
         return self.name

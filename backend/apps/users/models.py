@@ -3,6 +3,7 @@ from django.contrib.auth.models import AbstractBaseUser,BaseUserManager,Permissi
 
 from apps.common.models import BaseModel
 from apps.common.choices import USER_ROLE_CHOICES
+from apps.common.images import optimize_image_field
 
 
 class UserManager(BaseUserManager):
@@ -48,6 +49,11 @@ class User(AbstractBaseUser, BaseModel,PermissionsMixin):
     # REQUIRED_FIELDS = ['date_of_birth']
     
     objects = UserManager()
+
+    def save(self, *args, **kwargs):
+        optimize_image_field(self, "photo", max_side=512, quality=80)
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.phone_number if self.phone_number else str(self.telegram_id)    
 

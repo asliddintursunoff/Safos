@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.common.choices import USER_ROLE_CHOICES
+from apps.common.images import media_url
 from apps.users.api.auth import normalize_phone
 from apps.users.models import User
 
@@ -13,6 +14,11 @@ class UserBaseReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "first_name", "last_name", "phone_number", "role_type", "photo"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["photo"] = media_url(instance.photo)
+        return data
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -39,6 +45,11 @@ class UserSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "telegram_id": {"read_only": True},
         }
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["photo"] = media_url(instance.photo)
+        return data
 
     def validate_phone_number(self, value):
         return normalize_phone(value)

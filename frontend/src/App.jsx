@@ -76,7 +76,22 @@ export default function App() {
       setBoot(false);
       return;
     }
-    api.me().then((u) => { saveSession({ user: u }); setUser(u); })
+    api.me().then((u) => {
+      saveSession({ user: u });
+      setUser((prev) => {
+        if (
+          prev
+          && prev.id === u.id
+          && prev.role_type === u.role_type
+          && prev.first_name === u.first_name
+          && prev.last_name === u.last_name
+          && prev.phone_number === u.phone_number
+        ) {
+          return prev;
+        }
+        return u;
+      });
+    })
       .catch(() => { clearSession(); setUser(null); })
       .finally(() => setBoot(false));
   }, []);

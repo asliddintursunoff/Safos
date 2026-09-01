@@ -2,6 +2,7 @@ from django.contrib.gis.db import models
 
 from apps.common.models import BaseModel
 from apps.common.choices import PRODUCT_UNIT_CHOICES
+from apps.common.images import optimize_image_field
 
 
 class ProductCategory(BaseModel):
@@ -19,6 +20,10 @@ class Product(BaseModel):
     picture = models.ImageField(upload_to='product_images/', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        optimize_image_field(self, "picture", max_side=900, quality=78)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.id}  {self.name}"

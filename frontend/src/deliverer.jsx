@@ -5,6 +5,7 @@ import {
   MapScreen,
   MarketsScreen,
   NewMarket,
+  loadLeaflet,
   OrderFlow,
   OrderListCard,
   OrderView,
@@ -137,21 +138,16 @@ function TodayScreen({ go }) {
   const [orders, setOrders] = useState([]);
   const [error, setError] = useState("");
 
-  async function load() {
-    try {
-      const [c, o] = await Promise.all([
-        api.todayCount(),
-        api.orders("?status=APPROVED&page_size=200"),
-      ]);
-      setCounts(c);
-      setOrders(o.results || o);
-      setError("");
-    } catch (e) {
-      setError(e.message);
-    }
-  }
-
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    let alive = true;
+    api.todayCount()
+      .then((c) => { if (alive) setCounts(c); })
+      .catch((e) => { if (alive) setError(e.message); });
+    api.orders("?status=APPROVED&page_size=200")
+      .then((o) => { if (alive) { setOrders(o.results || o); setError(""); } })
+      .catch((e) => { if (alive) setError(e.message); });
+    return () => { alive = false; };
+  }, []);
 
   const products = counts?.counts_of_each_product || [];
 
@@ -192,7 +188,7 @@ function TodayScreen({ go }) {
         const meta = orderStatusMeta(o.status_code, o.status);
         return (
           <div
-            className="card"
+            className="card feed-card"
             key={o.id}
             onClick={() => { rememberBack("#/" ); go(`#/orders/${o.id}`); }}
             style={{ cursor: "pointer" }}
@@ -305,7 +301,7 @@ function NearWaysScreen({ go }) {
       const color = m.status_color || statusMeta(m.status_code, m.status).color;
       const label = statusMeta(m.status_code, m.status).label;
       const photo = m.image
-        ? `<img src="${esc(m.image)}" alt="${esc(m.name)}" />`
+        ? `<img src="${esc(m.image)}" alt="${esc(m.name)}" decoding="async" loading="lazy" />`
         : `<div class="ph">Rasm yo‘q</div>`;
       const marker = window.L.marker([m.lat, m.lng], {
         icon: numberedIcon(i + 1, color, i === 0),
@@ -378,29 +374,8 @@ function NearWaysScreen({ go }) {
   }
 
   useEffect(() => {
-    const el = document.getElementById("near-map");
-    if (!el || !window.L) return;
-    const map = window.L.map(el, { zoomControl: false }).setView([41.31, 69.24], 12);
-    window.L.control.zoom({ position: "bottomleft" }).addTo(map);
-    window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
-    mapRef.current = map;
-    layerRef.current = window.L.layerGroup().addTo(map);
-
+    let cancelled = false;
     let watchId = null;
-    if (navigator.geolocation) {
-      watchId = navigator.geolocation.watchPosition((pos) => {
-        const first = !hereRef.current;
-        hereRef.current = [pos.coords.latitude, pos.coords.longitude];
-        if (pos.coords.heading != null && !Number.isNaN(pos.coords.heading) && pos.coords.heading >= 0) {
-          headingRef.current = pos.coords.heading;
-        }
-        drawUser();
-        if (first && rowsRef.current.length) planRef.current(rowsRef.current);
-      }, (err) => {
-        if (err && err.code === 1) setRouteNote(geoErrorMessage(err));
-      }, { enableHighAccuracy: true, maximumAge: 3000 });
-    }
-
     function onOrient(e) {
       let heading = e.webkitCompassHeading;
       if (heading == null && e.alpha != null) heading = (360 - e.alpha) % 360;
@@ -408,19 +383,47 @@ function NearWaysScreen({ go }) {
       headingRef.current = heading;
       drawUser();
     }
-    window.addEventListener("deviceorientationabsolute", onOrient);
-    window.addEventListener("deviceorientation", onOrient);
 
     rememberBack("#/near");
     loadAndPlan();
     const timer = setInterval(loadAndPlan, 15000);
 
+    loadLeaflet().then(() => {
+      if (cancelled) return;
+      const el = document.getElementById("near-map");
+      if (!el || !window.L) return;
+      const map = window.L.map(el, { zoomControl: false }).setView([41.31, 69.24], 12);
+      window.L.control.zoom({ position: "bottomleft" }).addTo(map);
+      window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+      mapRef.current = map;
+      layerRef.current = window.L.layerGroup().addTo(map);
+
+      if (navigator.geolocation) {
+        watchId = navigator.geolocation.watchPosition((pos) => {
+          const first = !hereRef.current;
+          hereRef.current = [pos.coords.latitude, pos.coords.longitude];
+          if (pos.coords.heading != null && !Number.isNaN(pos.coords.heading) && pos.coords.heading >= 0) {
+            headingRef.current = pos.coords.heading;
+          }
+          drawUser();
+          if (first && rowsRef.current.length) planRef.current(rowsRef.current);
+        }, (err) => {
+          if (err && err.code === 1) setRouteNote(geoErrorMessage(err));
+        }, { enableHighAccuracy: true, maximumAge: 3000 });
+      }
+
+      window.addEventListener("deviceorientationabsolute", onOrient);
+      window.addEventListener("deviceorientation", onOrient);
+      if (rowsRef.current.length) planRef.current(rowsRef.current);
+    });
+
     return () => {
+      cancelled = true;
       clearInterval(timer);
       window.removeEventListener("deviceorientationabsolute", onOrient);
       window.removeEventListener("deviceorientation", onOrient);
       if (watchId != null) navigator.geolocation.clearWatch(watchId);
-      map.remove();
+      if (mapRef.current) mapRef.current.remove();
       mapRef.current = null;
       userRef.current = null;
       routeRef.current = null;
@@ -577,7 +580,7 @@ function MarketHub({ marketId, go }) {
   return (
     <div>
       <ScreenHeader title={market.name} backTo={lastBack("#/markets")} go={go} />
-      {market.image && <img className="market-hero" src={market.image} alt={market.name} />}
+      {market.image && <img className="market-hero" src={market.image} alt={market.name} decoding="async" />}
       <div className="card">
         <div className="row" style={{ alignItems: 'flex-start' }}>
           <span className="ring" style={{ borderColor: "transparent" }}>
@@ -1552,7 +1555,7 @@ function ProductsScreen({ go }) {
                 <div key={product.id} style={{ border: "1px solid rgba(148,163,184,0.25)", borderRadius: 12, padding: 10, background: "rgba(255,255,255,0.6)" }}>
                   <div className="row" style={{ alignItems: "center", gap: 8 }}>
                     {product.picture ? (
-                      <img src={product.picture} alt={product.name} style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover" }} />
+                      <img src={product.picture} alt={product.name} decoding="async" loading="lazy" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover" }} />
                     ) : (
                       <div style={{ width: 44, height: 44, borderRadius: 10, background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🛍️</div>
                     )}

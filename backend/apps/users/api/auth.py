@@ -12,6 +12,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.common.permissions import WORKER_ROLES
+from apps.common.images import media_url
 from apps.users.models import User
 
 
@@ -62,7 +63,7 @@ def user_payload(user):
         "color_code": user.color_code,
         "is_active": user.is_active,
         "telegram_id": user.telegram_id,
-        "photo": user.photo.url if getattr(user, "photo", None) else None,
+        "photo": media_url(user.photo),
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "last_login": user.last_login.isoformat() if user.last_login else None,
         "markets": markets,

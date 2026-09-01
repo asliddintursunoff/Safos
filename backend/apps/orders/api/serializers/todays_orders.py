@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from rest_framework.serializers import Serializer, DecimalField as SerDecimalField, UUIDField, CharField
 from apps.common.choices import PRODUCT_UNIT_CHOICES
+from apps.common.images import media_url
 
 class DeliveringMarketOrderSerializer(serializers.Serializer):
     id = serializers.UUIDField()
@@ -41,13 +42,7 @@ class DeliveringMarketOrderSerializer(serializers.Serializer):
 
     def get_market_image(self, obj):
         market = getattr(obj, "market", None)
-        if not market or not getattr(market, "image", None):
-            return None
-        request = self.context.get("request")
-        url = market.image.url
-        if request:
-            return request.build_absolute_uri(url)
-        return url
+        return media_url(getattr(market, "image", None) if market else None)
         
     
     

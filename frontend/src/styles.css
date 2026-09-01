@@ -176,6 +176,10 @@ button.tab { background: none; border: 0; cursor: pointer; font: inherit; }
 }
 .ring .core { width: 14px; height: 14px; border-radius: 50%; display: block; }
 .market-card { display: flex; gap: 10px; align-items: center; padding: 11px; cursor: pointer; }
+.feed-card, .market-card, .list-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
+}
 .map-wrap { position: relative; }
 .map-float { position: absolute; z-index: 800; left: 10px; right: 10px; top: 10px; }
 .map-hits { background: #fff; border-radius: 16px; margin-top: 6px; max-height: 160px; overflow: auto; box-shadow: 0 12px 28px rgba(16,24,40,.14); }
@@ -233,6 +237,7 @@ button.tab { background: none; border: 0; cursor: pointer; font: inherit; }
 .legend span { display: flex; align-items: center; }
 .date-head { font-size: 12px; font-weight: 800; color: var(--muted); margin: 16px 4px 8px; letter-spacing: .04em; text-transform: uppercase; }
 .photo { width: 44px; height: 44px; border-radius: 12px; object-fit: cover; background: var(--accent-soft); }
+img { max-width: 100%; }
 
 .head-avatar {
   width: 36px; height: 36px; border: 0; border-radius: 12px;

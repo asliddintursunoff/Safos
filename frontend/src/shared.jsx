@@ -3,6 +3,33 @@ import { api, lastBack, money, rememberBack, saveSession } from "./api";
 
 export const tg = window.Telegram?.WebApp;
 
+const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+let leafletPromise;
+
+export function loadLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (leafletPromise) return leafletPromise;
+  leafletPromise = new Promise((resolve, reject) => {
+    if (!document.querySelector(`link[href="${LEAFLET_CSS}"]`)) {
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = LEAFLET_CSS;
+      document.head.appendChild(css);
+    }
+    const script = document.createElement("script");
+    script.src = LEAFLET_JS;
+    script.async = true;
+    script.onload = () => resolve(window.L);
+    script.onerror = () => {
+      leafletPromise = null;
+      reject(new Error("Xarita yuklanmadi"));
+    };
+    document.head.appendChild(script);
+  });
+  return leafletPromise;
+}
+
 export const STATUS = {
   PENDING: { color: "#A855F7", label: "Tasdiqlanishi kutilmoqda" },
   WAITING: { color: "#3B82F6", label: "Buyurtmani kutmoqda" },
@@ -451,19 +478,29 @@ export function NewMarket({ go, backTo = "#/" }) {
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   useEffect(() => {
-    const el = document.getElementById("pick-map");
-    if (!el || !window.L || mapRef.current) return;
-    const map = window.L.map(el).setView([41.31, 69.24], 12);
-    window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
-    map.on("click", (e) => {
-      set("latitude", e.latlng.lat.toFixed(6));
-      set("longitude", e.latlng.lng.toFixed(6));
-      if (markerRef.current) map.removeLayer(markerRef.current);
-      markerRef.current = window.L.marker(e.latlng).addTo(map);
-      setNote("Xaritadan tanlandi");
+    let cancelled = false;
+    loadLeaflet().then(() => {
+      if (cancelled) return;
+      const el = document.getElementById("pick-map");
+      if (!el || !window.L || mapRef.current) return;
+      const map = window.L.map(el).setView([41.31, 69.24], 12);
+      window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+      map.on("click", (e) => {
+        set("latitude", e.latlng.lat.toFixed(6));
+        set("longitude", e.latlng.lng.toFixed(6));
+        if (markerRef.current) map.removeLayer(markerRef.current);
+        markerRef.current = window.L.marker(e.latlng).addTo(map);
+        setNote("Xaritadan tanlandi");
+      });
+      mapRef.current = map;
     });
-    mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; };
+    return () => {
+      cancelled = true;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
   }, []);
 
   function currentLocation() {
@@ -626,36 +663,8 @@ export function MapScreen({ go }) {
   drawRouteRef.current = drawRoute;
 
   useEffect(() => {
-    const el = document.getElementById("agent-map");
-    if (!el || !window.L) return;
-    const map = window.L.map(el, { zoomControl: false }).setView([41.31, 69.24], 12);
-    window.L.control.zoom({ position: "bottomleft" }).addTo(map);
-    window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
-    mapRef.current = map;
-    layerRef.current = window.L.layerGroup().addTo(map);
-    map.getContainer().addEventListener("click", (ev) => {
-      const btn = ev.target.closest("[data-dir-lat]");
-      if (!btn) return;
-      ev.preventDefault();
-      drawRouteRef.current([Number(btn.dataset.dirLat), Number(btn.dataset.dirLng)]);
-    });
-
+    let cancelled = false;
     let watchId = null;
-    if (navigator.geolocation) {
-      watchId = navigator.geolocation.watchPosition((pos) => {
-        hereRef.current = [pos.coords.latitude, pos.coords.longitude];
-        if (pos.coords.heading != null && !Number.isNaN(pos.coords.heading) && pos.coords.heading >= 0) {
-          headingRef.current = pos.coords.heading;
-        }
-        setHasUser(true);
-        drawUser();
-      }, (err) => {
-        if (err && err.code === 1) {
-          setRouteNote("Joylashuvga ruxsat berilmagan. Brauzer sozlamasidan ruxsat bering.");
-        }
-      }, { enableHighAccuracy: true, maximumAge: 3000 });
-    }
-
     function onOrient(e) {
       let heading = e.webkitCompassHeading;
       if (heading == null && e.alpha != null) heading = (360 - e.alpha) % 360;
@@ -663,14 +672,48 @@ export function MapScreen({ go }) {
       headingRef.current = heading;
       drawUser();
     }
-    window.addEventListener("deviceorientationabsolute", onOrient);
-    window.addEventListener("deviceorientation", onOrient);
+
+    loadLeaflet().then(() => {
+      if (cancelled) return;
+      const el = document.getElementById("agent-map");
+      if (!el || !window.L) return;
+      const map = window.L.map(el, { zoomControl: false }).setView([41.31, 69.24], 12);
+      window.L.control.zoom({ position: "bottomleft" }).addTo(map);
+      window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+      mapRef.current = map;
+      layerRef.current = window.L.layerGroup().addTo(map);
+      map.getContainer().addEventListener("click", (ev) => {
+        const btn = ev.target.closest("[data-dir-lat]");
+        if (!btn) return;
+        ev.preventDefault();
+        drawRouteRef.current([Number(btn.dataset.dirLat), Number(btn.dataset.dirLng)]);
+      });
+
+      if (navigator.geolocation) {
+        watchId = navigator.geolocation.watchPosition((pos) => {
+          hereRef.current = [pos.coords.latitude, pos.coords.longitude];
+          if (pos.coords.heading != null && !Number.isNaN(pos.coords.heading) && pos.coords.heading >= 0) {
+            headingRef.current = pos.coords.heading;
+          }
+          setHasUser(true);
+          drawUser();
+        }, (err) => {
+          if (err && err.code === 1) {
+            setRouteNote("Joylashuvga ruxsat berilmagan. Brauzer sozlamasidan ruxsat bering.");
+          }
+        }, { enableHighAccuracy: true, maximumAge: 3000 });
+      }
+
+      window.addEventListener("deviceorientationabsolute", onOrient);
+      window.addEventListener("deviceorientation", onOrient);
+    });
 
     return () => {
+      cancelled = true;
       window.removeEventListener("deviceorientationabsolute", onOrient);
       window.removeEventListener("deviceorientation", onOrient);
       if (watchId != null) navigator.geolocation.clearWatch(watchId);
-      map.remove();
+      if (mapRef.current) mapRef.current.remove();
       mapRef.current = null;
       userRef.current = null;
       routeRef.current = null;
@@ -692,7 +735,7 @@ export function MapScreen({ go }) {
         ? `<div class="muted">Agent: ${esc(m.last_order_agent_name)}</div>`
         : "";
       const photo = m.image
-        ? `<img src="${esc(m.image)}" alt="${esc(m.name)}" />`
+        ? `<img src="${esc(m.image)}" alt="${esc(m.name)}" decoding="async" loading="lazy" />`
         : `<div class="ph">Rasm yo‘q</div>`;
       if (agentColor) {
         window.L.circleMarker([m.latitude, m.longitude], {
@@ -1399,7 +1442,7 @@ export function ProfileScreen({ user, onLogout }) {
     <div>
       <div className="card" style={{ textAlign: "center" }}>
         {user.photo ? (
-          <img src={user.photo} alt="avatar" className="avatar" />
+          <img src={user.photo} alt="avatar" className="avatar" decoding="async" />
         ) : (
           <div className="avatar">{initials}</div>
         )}

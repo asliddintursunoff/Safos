@@ -7,6 +7,7 @@ from django.contrib.gis.geos import Point
 from apps.markets.models import Market, MarketStatus
 from apps.users.models import User
 from apps.users.api.serializers import UserBaseReadSerializer
+from apps.common.images import media_url
 
 
 
@@ -75,13 +76,7 @@ class MarketListSerializer(serializers.ModelSerializer):
         return getattr(agent, "color_code", None) if agent else None
 
     def get_image(self, obj):
-        if not obj.image:
-            return None
-        request = self.context.get("request")
-        url = obj.image.url
-        if request:
-            return request.build_absolute_uri(url)
-        return url
+        return media_url(obj.image)
         
 class MarketCreateSerializer(serializers.ModelSerializer):
     latitude = serializers.FloatField(write_only=True, required=False, allow_null=True)
@@ -106,6 +101,11 @@ class MarketCreateSerializer(serializers.ModelSerializer):
             "longitude",
         ]
         extra_kwargs = {"created_by": {"read_only": True}, "id": {"read_only": True}}
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["image"] = media_url(instance.image)
+        return data
 
     def validate(self, attrs):
         request = self.context.get("request")
