@@ -4,6 +4,7 @@ import { AdminApp, DelivererApp } from "./deliverer";
 import {
   BootSkeleton,
   Login,
+  ToastHost,
   MapScreen,
   MarketsScreen,
   MoneyScreen,
@@ -113,9 +114,10 @@ export default function App() {
     setUser(next);
   }
 
-  if (boot) return <BootSkeleton />;
-  if (!user) {
-    return (
+  let body;
+  if (boot) body = <BootSkeleton />;
+  else if (!user) {
+    body = (
       <Login
         onLogin={(data) => {
           saveSession(data);
@@ -124,18 +126,12 @@ export default function App() {
         }}
       />
     );
-  }
-
-  if (user.role_type === "ADMIN") {
-    return <AdminApp user={user} path={path} parts={parts} go={go} logout={logout} onUserUpdate={onUserUpdate} />;
-  }
-
-  if (user.role_type === "DELIVERER") {
-    return <DelivererApp user={user} path={path} parts={parts} go={go} logout={logout} onUserUpdate={onUserUpdate} />;
-  }
-
-  if (user.role_type !== "AGENT") {
-    return (
+  } else if (user.role_type === "ADMIN") {
+    body = <AdminApp user={user} path={path} parts={parts} go={go} logout={logout} onUserUpdate={onUserUpdate} />;
+  } else if (user.role_type === "DELIVERER") {
+    body = <DelivererApp user={user} path={path} parts={parts} go={go} logout={logout} onUserUpdate={onUserUpdate} />;
+  } else if (user.role_type !== "AGENT") {
+    body = (
       <div className="app">
         <div className="card">
           <h2 className="h2">Bu rol uchun kabinet hali tayyor emas</h2>
@@ -144,7 +140,14 @@ export default function App() {
         </div>
       </div>
     );
+  } else {
+    body = <AgentApp user={user} path={path} parts={parts} go={go} logout={logout} onUserUpdate={onUserUpdate} />;
   }
 
-  return <AgentApp user={user} path={path} parts={parts} go={go} logout={logout} onUserUpdate={onUserUpdate} />;
+  return (
+    <>
+      {body}
+      <ToastHost />
+    </>
+  );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, lastBack, money, rememberBack, saveSession } from "./api";
 import { openOrderPrint } from "./print";
+import { onToast, toast } from "./toast";
 
 export const tg = window.Telegram?.WebApp;
 
@@ -72,6 +73,37 @@ export function useRoute() {
 export function ErrorText({ error }) {
   if (!error) return null;
   return <div className="error">{error}</div>;
+}
+
+export function ToastHost() {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    const timers = new Map();
+    const unsub = onToast((item) => {
+      setItems((prev) => [...prev.slice(-2), item]);
+      const wait = item.type === "error" ? 4500 : 2800;
+      const timer = setTimeout(() => {
+        setItems((prev) => prev.filter((row) => row.id !== item.id));
+        timers.delete(item.id);
+      }, wait);
+      timers.set(item.id, timer);
+    });
+    return () => {
+      unsub();
+      timers.forEach((timer) => clearTimeout(timer));
+    };
+  }, []);
+  if (!items.length) return null;
+  return (
+    <div className="toast-host" aria-live="polite">
+      {items.map((item) => (
+        <div className={`toast ${item.type}`} key={item.id} role="status">
+          <b>{item.type === "error" ? "!" : "✓"}</b>
+          <span>{item.message}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function Skel({ w = "100%", h = 12, r = 8, style, className = "" }) {
@@ -537,6 +569,7 @@ export function Login({ onLogin }) {
       const body = { phone_number: phone, password };
       if (tg?.initDataUnsafe?.user?.id) body.telegram_id = tg.initDataUnsafe.user.id;
       const data = await api.login(body);
+      toast.ok("Xush kelibsiz");
       onLogin(data);
     } catch (err) {
       setError(err.message);
@@ -761,9 +794,11 @@ export function NewMarket({ go, backTo = "#/", marketId = null }) {
     try {
       if (editing) {
         await api.updateMarket(marketId, fd);
+        toast.ok("Do'kon yangilandi");
         go(backTo || `#/markets/${marketId}`);
       } else {
         await api.createMarket(fd);
+        toast.ok("Yangi do'kon qo'shildi");
         go(backTo);
       }
     } catch (err) {
@@ -1265,10 +1300,12 @@ export function OrderFlow({ marketId, user, go, editOrderId, backTo = "#/" }) {
     try {
       if (editing) {
         await api.updateOrder(editOrderId, { items });
+        toast.ok("Buyurtma yangilandi");
         rememberBack(backTo);
         go(`#/orders/${editOrderId}`);
       } else {
         const order = await api.createOrder({ market_id: marketId, items });
+        toast.ok("Buyurtma qabul qilindi");
         rememberBack(backTo);
         go(`#/orders/${order.id}`);
       }
@@ -1378,6 +1415,7 @@ export function OrderView({ id, user, go, backTo }) {
     if (!confirm("O'chirilsinmi?")) return;
     try {
       await api.deleteOrder(id);
+      toast.ok("Buyurtma o'chirildi");
       go(back);
     } catch (e) {
       setError(e.message);
@@ -1389,6 +1427,14 @@ export function OrderView({ id, user, go, backTo }) {
     setError("");
     try {
       await api.setOrderStatus(id, status);
+      const statusNotes = {
+        APPROVED: "Buyurtma tasdiqlandi",
+        PENDING: "Tasdiq bekor qilindi",
+        DELIVERED: "Buyurtma yetkazildi",
+        CANCELLED: "Buyurtma bekor qilindi",
+        REJECTED: "Buyurtma rad etildi",
+      };
+      toast.ok(statusNotes[status] || "Buyurtma holati yangilandi");
       // If order marked delivered, navigate to market page immediately so the market can be processed
       if (status === "DELIVERED") {
         try {
@@ -1703,6 +1749,7 @@ export function ProfileScreen({ user, onLogout, onUserUpdate }) {
       onUserUpdate?.(nextUser);
       setEditing(false);
       setPhotoFile(null);
+      toast.ok("Profil saqlandi");
     } catch (err) {
       setError(err.message || String(err));
     } finally {
@@ -1719,6 +1766,7 @@ export function ProfileScreen({ user, onLogout, onUserUpdate }) {
       const nextUser = res && res.id ? res : await api.me();
       saveSession({ user: nextUser });
       onUserUpdate?.(nextUser);
+      toast.ok("Rasm o'chirildi");
     } catch (err) {
       setError(err.message || String(err));
     } finally {

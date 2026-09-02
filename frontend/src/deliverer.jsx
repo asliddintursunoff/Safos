@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, lastBack, money, rememberBack, unitLabel } from "./api";
+import { toast } from "./toast";
 import {
   ErrorText,
   MapScreen,
@@ -573,6 +574,7 @@ function MarketHub({ marketId, go, user }) {
     try {
       await api.pay({ market_id: marketId, amount: value });
       setAmount("");
+      toast.ok(`To'lov qabul qilindi: ${money(value)}`);
       await load();
     } catch (err) {
       setError(err.message);
@@ -589,6 +591,7 @@ function MarketHub({ marketId, go, user }) {
     setError("");
     try {
       await api.setMarketStatus(marketId, nextStatus);
+      toast.ok("Do'kon holati yangilandi");
       const nextColor = marketStatusColor(nextStatus, nextStatus);
       setMarket((prev) => prev ? {
         ...prev,
@@ -611,6 +614,7 @@ function MarketHub({ marketId, go, user }) {
     setError("");
     try {
       await api.deleteMarket(marketId);
+      toast.ok("Do'kon o'chirildi");
       go("#/markets");
     } catch (err) {
       setError(err.message);
@@ -919,6 +923,7 @@ function PendingScreen({ go }) {
     setError("");
     try {
       await api.setOrderStatus(o.id, next);
+      toast.ok(next === "APPROVED" ? "Buyurtma tasdiqlandi" : "Tasdiq bekor qilindi");
       setItems((prev) => prev.map((row) => (
         row.id === o.id
           ? { ...row, status_code: next, status: orderStatusMeta(next, next).label }
@@ -1295,6 +1300,7 @@ function MarketStatisticsScreen({ go, compact = false }) {
     setError("");
     try {
       await api.bulkMarketStatus({ market_ids: Array.from(selected), status: statusChoice });
+      toast.ok(`${selected.size} ta do'kon holati yangilandi`);
       setSelected(new Set());
       setSelectAll(false);
       await load();
@@ -1547,6 +1553,7 @@ function ProductsScreen({ go }) {
         await api.createCategory({ name });
       }
       closeCategoryModal();
+      toast.ok(editingCategory ? "Kategoriya yangilandi" : "Kategoriya qo'shildi");
       await load();
     } catch (e) {
       setError(e.message || String(e));
@@ -1560,6 +1567,7 @@ function ProductsScreen({ go }) {
     setError("");
     try {
       await api.deleteCategory(id);
+      toast.ok("Kategoriya o'chirildi");
       await load();
     } catch (e) {
       setError(e.message || String(e));
@@ -1596,6 +1604,7 @@ function ProductsScreen({ go }) {
         await api.createProduct(formData);
       }
       closeProductModal();
+      toast.ok(editingProduct ? "Mahsulot yangilandi" : "Mahsulot qo'shildi");
       await load();
     } catch (e) {
       setError(e.message || String(e));
@@ -1609,6 +1618,7 @@ function ProductsScreen({ go }) {
     setError("");
     try {
       await api.deleteProduct(id);
+      toast.ok("Mahsulot o'chirildi");
       await load();
     } catch (e) {
       setError(e.message || String(e));
@@ -1899,6 +1909,7 @@ function WorkerManagementScreen({ go }) {
         await api.createUser(payload);
       }
       closeModal();
+      toast.ok(editingId ? "Xodim yangilandi" : "Yangi xodim qo'shildi");
       await load();
     } catch (e) {
       setError(e.message || String(e));
@@ -1914,6 +1925,7 @@ function WorkerManagementScreen({ go }) {
     try {
       await api.deleteUser(id);
       closeModal();
+      toast.ok("Xodim o'chirildi");
       await load();
     } catch (e) {
       setError(e.message || String(e));
