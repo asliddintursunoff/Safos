@@ -29,6 +29,12 @@ import {
   deliveredByLabel,
   userIcon,
   ApproveToggle,
+  CardListSkeleton,
+  DetailSkeleton,
+  MarketListSkeleton,
+  OrderListSkeleton,
+  Skel,
+  TodaySkeleton,
 } from "./shared";
 
 const TABS = [
@@ -137,6 +143,7 @@ function TodayScreen({ go }) {
   const [counts, setCounts] = useState(null);
   const [orders, setOrders] = useState([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -148,11 +155,22 @@ function TodayScreen({ go }) {
           setError("");
         }
       }),
-    ]).catch((e) => { if (alive) setError(e.message); });
+    ])
+      .catch((e) => { if (alive) setError(e.message); })
+      .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, []);
 
   const products = counts?.counts_of_each_product || [];
+
+  if (loading && !counts && !orders.length) {
+    return (
+      <div>
+        <ErrorText error={error} />
+        <TodaySkeleton />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -215,6 +233,7 @@ function NearWaysScreen({ go }) {
   const [rows, setRows] = useState([]);
   const [ordered, setOrdered] = useState([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const [routeNote, setRouteNote] = useState("Joylashuv olinmoqda...");
   const [nextName, setNextName] = useState("");
   const mapRef = useRef(null);
@@ -376,6 +395,8 @@ function NearWaysScreen({ go }) {
       await planRef.current(merged);
     } catch (e) {
       setError(e.message);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -460,6 +481,7 @@ function NearWaysScreen({ go }) {
       <ErrorText error={error} />
       <div className="map-wrap">
         <div id="near-map" className="map" style={{ height: "52vh" }} />
+        {loading && <div className="skel-block skel-map-cover" />}
         <div className="map-actions">
           <button type="button" className="me-btn" onClick={recenter}>Mening joyim</button>
         </div>
@@ -483,7 +505,19 @@ function NearWaysScreen({ go }) {
             <div className="muted">{statusMeta(m.status_code, m.status).label}</div>
           </div>
         ))}
-        {!ordered.length && <div className="muted">Xaritada ko'rsatiladigan do'kon yo'q</div>}
+        {loading && !ordered.length ? (
+          [0, 1, 2, 3].map((i) => (
+            <div className="list-item" key={i}>
+              <div className="row">
+                <Skel w={`${52 + i * 6}%`} h={14} />
+                <Skel w={40} h={10} />
+              </div>
+              <Skel w="42%" h={10} style={{ marginTop: 8 }} />
+            </div>
+          ))
+        ) : (
+          !ordered.length && <div className="muted">Xaritada ko'rsatiladigan do'kon yo'q</div>
+        )}
       </div>
     </div>
   );
@@ -588,7 +622,7 @@ function MarketHub({ marketId, go, user }) {
     return (
       <div>
         <ScreenHeader title="Do'kon" backTo={lastBack("#/markets")} go={go} />
-        <div className="card">{error || "Yuklanmoqda..."}</div>
+        {error ? <div className="card">{error}</div> : <DetailSkeleton />}
       </div>
     );
   }
@@ -693,7 +727,7 @@ function MarketPaymentsScreen({ marketId, go }) {
   const [market, setMarket] = useState(null);
   const [page, setPage] = useState(1);
   const [next, setNext] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
 
   async function load(currentPage = 1) {
@@ -727,6 +761,7 @@ function MarketPaymentsScreen({ marketId, go }) {
     <div>
       <ScreenHeader title={market?.name || "To'lovlar"} backTo={`#/markets/${marketId}`} go={go} />
       <ErrorText error={error} />
+      {busy && !rows.length && <CardListSkeleton count={4} />}
       {rows.map((p) => (
         <div className="card" key={p.id} style={{ marginTop: 12 }}>
           <div className="row">
@@ -751,6 +786,7 @@ function MarketDebtOrdersScreen({ marketId, go }) {
   const [items, setItems] = useState([]);
   const [market, setMarket] = useState(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -764,7 +800,8 @@ function MarketDebtOrdersScreen({ marketId, go }) {
         const rows = Array.isArray(d) ? d : d.results || [];
         setItems(rows);
       })
-      .catch((e) => { if (alive) setError(e.message); });
+      .catch((e) => { if (alive) setError(e.message); })
+      .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [marketId]);
 
@@ -772,6 +809,7 @@ function MarketDebtOrdersScreen({ marketId, go }) {
     <div>
       <ScreenHeader title={market?.name || "Qarzdagi buyurtmalar"} backTo={`#/markets/${marketId}`} go={go} />
       <ErrorText error={error} />
+      {loading && !items.length && <CardListSkeleton count={4} />}
       {items.map((o) => {
         const taken = takenByLabel(o) || personName(o.ordered_by);
         const given = deliveredByLabel(o) || personName(o.delivered_by);
@@ -796,7 +834,7 @@ function MarketDebtOrdersScreen({ marketId, go }) {
           </div>
         );
       })}
-      {!items.length && !error && <div className="empty">Qarzdor buyurtma yo'q</div>}
+      {!loading && !items.length && !error && <div className="empty">Qarzdor buyurtma yo'q</div>}
     </div>
   );
 }
@@ -805,6 +843,7 @@ function MarketOrdersScreen({ marketId, go }) {
   const [items, setItems] = useState([]);
   const [market, setMarket] = useState(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -818,7 +857,8 @@ function MarketOrdersScreen({ marketId, go }) {
         const rows = d.results || d;
         setItems(rows.filter((o) => String(o.market_id) === String(marketId)));
       })
-      .catch((e) => { if (alive) setError(e.message); });
+      .catch((e) => { if (alive) setError(e.message); })
+      .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [marketId]);
 
@@ -831,6 +871,7 @@ function MarketOrdersScreen({ marketId, go }) {
         go={go}
         from={`#/markets/${marketId}/orders`}
         empty="Bu do'konda buyurtma yo'q"
+        loading={loading}
       />
     </div>
   );
@@ -841,6 +882,7 @@ function PendingScreen({ go }) {
   const [filter, setFilter] = useState("all");
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState("");
+  const [loading, setLoading] = useState(true);
 
   async function load() {
     try {
@@ -857,6 +899,8 @@ function PendingScreen({ go }) {
       setError("");
     } catch (e) {
       setError(e.message);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -931,7 +975,8 @@ function PendingScreen({ go }) {
           </div>
         );
       })}
-      {!visible.length && <div className="empty">Bu bo‘limda buyurtma yo'q</div>}
+      {loading && !items.length && <OrderListSkeleton count={5} cards />}
+      {!loading && !visible.length && <div className="empty">Bu bo‘limda buyurtma yo'q</div>}
     </div>
   );
 }
@@ -940,7 +985,7 @@ function HistoryScreen({ go }) {
   const [items, setItems] = useState([]);
   const [next, setNext] = useState(null);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [marketQuery, setMarketQuery] = useState("");
   const [dateQuery, setDateQuery] = useState("");
 
@@ -987,7 +1032,7 @@ function HistoryScreen({ go }) {
         <button type="submit" className="btn secondary" disabled={busy}>{busy ? "Qidirilmoqda..." : "Qidirish"}</button>
       </form>
       <ErrorText error={error} />
-      <OrderListCard items={items} go={go} from="#/history" empty="Buyurtmalar tarixi bo'sh" />
+      <OrderListCard items={items} go={go} from="#/history" empty="Buyurtmalar tarixi bo'sh" loading={busy} />
       {next && (
         <button className="btn secondary" disabled={busy} onClick={() => load(next)}>
           {busy ? "Yuklanmoqda..." : "Yana yuklash"}
@@ -1004,7 +1049,7 @@ function TransactionsScreen({ go }) {
   const [dateQuery, setDateQuery] = useState("");
   const [page, setPage] = useState(1);
   const [next, setNext] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
 
   async function load(currentPage = 1, qs = null) {
@@ -1057,9 +1102,9 @@ function TransactionsScreen({ go }) {
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="row">
           <div className="h2" style={{ margin: 0 }}>Tranzaksiyalar</div>
-          <b>{money(todayTotal)}</b>
+          <b>{busy && !rows.length ? <Skel w={88} h={16} /> : money(todayTotal)}</b>
         </div>
-        <div className="muted">Bugun qabul qilingan: {money(todayTotal)}</div>
+        <div className="muted">Bugun qabul qilingan: {busy && !rows.length ? <Skel w={120} h={12} style={{ display: "inline-block" }} /> : money(todayTotal)}</div>
       </div>
       <form className="card stack" style={{ marginBottom: 10 }} onSubmit={runSearch}>
         <input
@@ -1094,7 +1139,7 @@ function TransactionsScreen({ go }) {
             ))}
           </div>
         );
-      }) : (!busy && <div className="empty">Hech qanday tranzaksiya topilmadi</div>)}
+      }) : (busy ? <CardListSkeleton count={4} /> : <div className="empty">Hech qanday tranzaksiya topilmadi</div>)}
       {next && (
         <button className="btn secondary" disabled={busy} style={{ marginTop: 12 }} onClick={() => load(page + 1, `?${new URLSearchParams({
           page: String(page + 1),
@@ -1115,7 +1160,7 @@ function MarketStatisticsScreen({ go, compact = false }) {
   const [inactiveDays, setInactiveDays] = useState("");
   const [hasDebt, setHasDebt] = useState(false);
   const [ordering, setOrdering] = useState("-days_since_last_order");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState(new Set());
   const [selectAll, setSelectAll] = useState(false);
@@ -1288,7 +1333,7 @@ function MarketStatisticsScreen({ go, compact = false }) {
               <div style={{ textAlign: 'right', fontWeight: 700 }}>{money(m.debt_total)}</div>
             </div>
           </div>
-        )) : (!busy && <div className="empty">Qarzli do'konlar yo'q</div>)}
+        )) : (busy ? <CardListSkeleton count={5} /> : <div className="empty">Qarzli do'konlar yo'q</div>)}
       </div>
     );
   }
@@ -1301,15 +1346,15 @@ function MarketStatisticsScreen({ go, compact = false }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
           <div style={{ background: '#f8fafc', borderRadius: 14, padding: '10px 12px' }}>
             <div className="muted" style={{ fontSize: 11 }}>Do'konlar</div>
-            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}>{totals.market_count}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}>{busy && !rows.length ? <Skel w={48} h={22} /> : totals.market_count}</div>
           </div>
           <div style={{ background: '#fff7ed', borderRadius: 14, padding: '10px 12px' }}>
             <div className="muted" style={{ fontSize: 11 }}>Qarzli</div>
-            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}>{totals.markets_with_debt}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}>{busy && !rows.length ? <Skel w={48} h={22} /> : totals.markets_with_debt}</div>
           </div>
           <div style={{ background: '#ecfdf5', borderRadius: 14, padding: '10px 12px' }}>
             <div className="muted" style={{ fontSize: 11 }}>Jami qarz</div>
-            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 4 }}>{money(totals.total_debt)}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 4 }}>{busy && !rows.length ? <Skel w={72} h={20} /> : money(totals.total_debt)}</div>
           </div>
         </div>
       </div>
@@ -1396,7 +1441,7 @@ function MarketStatisticsScreen({ go, compact = false }) {
               </div>
             </div>
           );
-        }) : (!busy && <div className="empty">Natija topilmadi</div>)}
+        }) : (busy ? <MarketListSkeleton count={6} /> : <div className="empty">Natija topilmadi</div>)}
       </div>
     </div>
   );
@@ -1405,7 +1450,7 @@ function MarketStatisticsScreen({ go, compact = false }) {
 
 function ProductsScreen({ go }) {
   const [categories, setCategories] = useState([]);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
@@ -1631,7 +1676,7 @@ function ProductsScreen({ go }) {
           )}
         </div>
       )) : (
-        !busy && <div className="empty">Mahsulotlar yo'q</div>
+        busy ? <CardListSkeleton count={3} /> : <div className="empty">Mahsulotlar yo'q</div>
       )}
 
       {categoryOpen && (
@@ -1698,7 +1743,7 @@ function WorkerManagementScreen({ go }) {
   const [rows, setRows] = useState([]);
   const [filter, setFilter] = useState("all");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [editingId, setEditingId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
@@ -1925,6 +1970,7 @@ function WorkerManagementScreen({ go }) {
           </div>
         </div>
       ))}
+      {busy && !visible.length && <CardListSkeleton count={5} />}
       {!visible.length && !busy && <div className="empty">Bu toifadagi xodim yo'q</div>}
 
       {statsOpen && (
@@ -2008,7 +2054,7 @@ function WorkerManagementScreen({ go }) {
                     </div>
                   ))}
                 </div>
-              ) : (!statsBusy && !statsError && <div className="empty">Bu davr uchun statistikalar yo'q</div>)}
+              ) : (statsBusy ? <CardListSkeleton count={3} /> : (!statsError && <div className="empty">Bu davr uchun statistikalar yo'q</div>))}
             </div>
           </div>
         </div>

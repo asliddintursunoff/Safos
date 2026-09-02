@@ -320,3 +320,39 @@ img { max-width: 100%; }
 .product-grid {
   display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px;
 }
+
+.skel {
+  display: block;
+  background: linear-gradient(90deg, #e8edf4 0%, #f7f9fc 42%, #e8edf4 84%);
+  background-size: 220% 100%;
+  animation: skel-shine 1.2s ease-in-out infinite;
+}
+.skel-circle {
+  display: block;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, #e8edf4 0%, #f7f9fc 42%, #e8edf4 84%);
+  background-size: 220% 100%;
+  animation: skel-shine 1.2s ease-in-out infinite;
+}
+.skel-block {
+  background: linear-gradient(90deg, #e4eaf2 0%, #f5f7fb 42%, #e4eaf2 84%);
+  background-size: 220% 100%;
+  animation: skel-shine 1.2s ease-in-out infinite;
+}
+.skel-map-cover {
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  z-index: 750;
+  pointer-events: none;
+}
+@keyframes skel-shine {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skel, .skel-circle, .skel-block { animation: none; }
+}

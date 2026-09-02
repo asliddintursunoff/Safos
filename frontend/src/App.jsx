@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, clearSession, getRefresh, getStoredUser, saveSession } from "./api";
 import { AdminApp, DelivererApp } from "./deliverer";
 import {
+  BootSkeleton,
   Login,
   MapScreen,
   MarketsScreen,
@@ -112,7 +113,7 @@ export default function App() {
     setUser(next);
   }
 
-  if (boot) return <div className="app"><div className="card">Yuklanmoqda...</div></div>;
+  if (boot) return <BootSkeleton />;
   if (!user) {
     return (
       <Login

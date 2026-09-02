@@ -74,6 +74,176 @@ export function ErrorText({ error }) {
   return <div className="error">{error}</div>;
 }
 
+export function Skel({ w = "100%", h = 12, r = 8, style, className = "" }) {
+  return (
+    <span
+      className={`skel ${className}`}
+      style={{ width: w, height: h, borderRadius: r, ...style }}
+      aria-hidden="true"
+    />
+  );
+}
+
+function skelTimes(count) {
+  return Array.from({ length: count }, (_, i) => i);
+}
+
+export function MarketListSkeleton({ count = 7 }) {
+  return (
+    <div className="card" style={{ padding: 0 }} aria-hidden="true">
+      {skelTimes(count).map((i) => (
+        <div className="market-card" key={i}>
+          <span className="skel-circle" />
+          <div style={{ flex: 1 }}>
+            <Skel w={`${52 + (i % 3) * 10}%`} h={14} />
+            <Skel w="36%" h={10} style={{ marginTop: 8 }} />
+          </div>
+          <Skel w={40} h={10} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function OrderListSkeleton({ count = 5, cards = false }) {
+  const row = (i) => (
+    <div className={cards ? "card feed-card" : "list-item"} key={i}>
+      <div className="row">
+        <Skel w={`${48 + (i % 3) * 8}%`} h={14} />
+        <Skel w={72} h={18} r={999} />
+      </div>
+      <Skel w="58%" h={10} style={{ marginTop: 8 }} />
+    </div>
+  );
+  if (cards) return <div aria-hidden="true">{skelTimes(count).map(row)}</div>;
+  return (
+    <div aria-hidden="true">
+      <div className="date-head"><Skel w={90} h={10} /></div>
+      <div className="card">{skelTimes(count).map(row)}</div>
+    </div>
+  );
+}
+
+export function CardListSkeleton({ count = 5 }) {
+  return (
+    <div aria-hidden="true">
+      {skelTimes(count).map((i) => (
+        <div className="card" key={i}>
+          <div className="row">
+            <div style={{ flex: 1 }}>
+              <Skel w={`${50 + (i % 3) * 12}%`} h={14} />
+              <Skel w="38%" h={10} style={{ marginTop: 8 }} />
+            </div>
+            <Skel w={70} h={16} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function MoneySkeleton() {
+  return (
+    <div className="card" aria-hidden="true">
+      <Skel w={90} h={10} />
+      <Skel w={168} h={26} style={{ marginTop: 10 }} />
+      <Skel w={120} h={10} style={{ marginTop: 14 }} />
+      <Skel w={140} h={18} style={{ marginTop: 8 }} />
+    </div>
+  );
+}
+
+export function ProductListSkeleton({ groups = 2 }) {
+  return (
+    <div aria-hidden="true">
+      {skelTimes(groups).map((g) => (
+        <div className="card" key={g}>
+          <Skel w="42%" h={14} style={{ marginBottom: 12 }} />
+          {skelTimes(3).map((p) => (
+            <div className="list-item" key={p}>
+              <div className="product-row">
+                <div>
+                  <Skel w={`${55 + p * 8}%`} h={14} />
+                  <Skel w="40%" h={10} style={{ marginTop: 8 }} />
+                </div>
+                <Skel w={120} h={34} r={14} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function DetailSkeleton() {
+  return (
+    <div aria-hidden="true">
+      <div className="card">
+        <div className="row">
+          <Skel w={120} h={22} r={999} />
+          <Skel w={88} h={18} />
+        </div>
+      </div>
+      {skelTimes(3).map((i) => (
+        <div className="card" key={i}>
+          <Skel w="28%" h={14} style={{ marginBottom: 12 }} />
+          <Skel w="100%" h={12} style={{ marginBottom: 10 }} />
+          <Skel w="86%" h={12} style={{ marginBottom: 10 }} />
+          <Skel w="64%" h={12} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function TodaySkeleton() {
+  return (
+    <div aria-hidden="true">
+      <div className="card today-hero">
+        <div className="row">
+          <div>
+            <Skel w={150} h={10} />
+            <Skel w={52} h={26} style={{ marginTop: 8 }} />
+          </div>
+          <div>
+            <Skel w={40} h={10} style={{ marginLeft: "auto" }} />
+            <Skel w={96} h={16} style={{ marginTop: 8, marginLeft: "auto" }} />
+          </div>
+        </div>
+        <Skel w="100%" h={40} r={12} style={{ marginTop: 12 }} />
+      </div>
+      <div className="card">
+        <Skel w={150} h={14} style={{ marginBottom: 12 }} />
+        {skelTimes(3).map((i) => (
+          <div className="list-item plain-item" key={i}>
+            <div className="row">
+              <Skel w="48%" h={12} />
+              <Skel w={72} h={12} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <OrderListSkeleton count={3} cards />
+    </div>
+  );
+}
+
+export function BootSkeleton() {
+  return (
+    <div className="app" aria-busy="true">
+      <div className="top">
+        <div>
+          <Skel w={128} h={18} />
+          <Skel w={72} h={10} style={{ marginTop: 8 }} />
+        </div>
+        <span className="skel-circle" style={{ width: 36, height: 36 }} />
+      </div>
+      <MarketListSkeleton count={6} />
+    </div>
+  );
+}
+
 export function statusMeta(code, fallback) {
   return STATUS[code] || { color: "#94a3b8", label: fallback || code };
 }
@@ -394,6 +564,7 @@ export function MarketsScreen({ go, user }) {
   const [radius, setRadius] = useState(null);
   const [items, setItems] = useState([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   const loadId = useRef(0);
 
@@ -418,6 +589,8 @@ export function MarketsScreen({ go, user }) {
     } catch (e) {
       if (id !== loadId.current) return;
       setError(meters ? "Joylashuv olinmadi yoki yaqin do'kon yo'q" : e.message);
+    } finally {
+      if (id === loadId.current) setLoading(false);
     }
   }
 
@@ -450,6 +623,9 @@ export function MarketsScreen({ go, user }) {
         ))}
       </div>
       <ErrorText error={error} />
+      {loading && !items.length ? (
+        <MarketListSkeleton />
+      ) : (
       <div className="card" style={{ padding: 0 }}>
         {items.map((m) => {
           const meta = statusMeta(m.status_code, m.status);
@@ -473,6 +649,7 @@ export function MarketsScreen({ go, user }) {
         })}
         {!items.length && <div className="empty">Do'kon topilmadi</div>}
       </div>
+      )}
       <button className="fab" onClick={() => go("#/markets/new")}>+</button>
     </div>
   );
@@ -625,6 +802,7 @@ export function MapScreen({ go }) {
   const [q, setQ] = useState("");
   const [radius, setRadius] = useState(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const [hasUser, setHasUser] = useState(false);
   const [routeNote, setRouteNote] = useState("");
   const mapRef = useRef(null);
@@ -648,7 +826,8 @@ export function MapScreen({ go }) {
     let alive = true;
     api.markets()
       .then((d) => { if (alive) setMarkets(Array.isArray(d) ? d : d.results || []); })
-      .catch((e) => { if (alive) setError(e.message); });
+      .catch((e) => { if (alive) setError(e.message); })
+      .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, []);
 
@@ -849,6 +1028,7 @@ export function MapScreen({ go }) {
       <ErrorText error={error} />
       <div className="map-wrap">
         <div id="agent-map" className="map" style={{ height: "58vh" }} />
+        {loading && <div className="skel-block skel-map-cover" />}
         <div className="map-float">
           <div className="search-wrap" style={{ margin: 0 }}>
             <input placeholder="Do‘kon nomini qidirish..." value={q} onChange={(e) => setQ(e.target.value)} />
@@ -902,11 +1082,13 @@ export function MapScreen({ go }) {
 export function MyOrdersScreen({ go }) {
   const [items, setItems] = useState([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     let alive = true;
     api.orders("?page_size=200")
       .then((d) => { if (alive) setItems(d.results || d); })
-      .catch((e) => { if (alive) setError(e.message); });
+      .catch((e) => { if (alive) setError(e.message); })
+      .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, []);
   const groups = [];
@@ -919,6 +1101,7 @@ export function MyOrdersScreen({ go }) {
   return (
     <div>
       <ErrorText error={error} />
+      {loading && !items.length && <OrderListSkeleton count={6} />}
       {groups.map((g) => (
         <div key={g.day}>
           <div className="date-head">{formatDate(g.day)}</div>
@@ -937,7 +1120,7 @@ export function MyOrdersScreen({ go }) {
           </div>
         </div>
       ))}
-      {!items.length && <div className="empty">Hali buyurtma yo'q</div>}
+      {!loading && !items.length && <div className="empty">Hali buyurtma yo'q</div>}
     </div>
   );
 }
@@ -947,6 +1130,7 @@ export function MoneyScreen() {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("Bugun");
 
   function toApiDate(value) {
@@ -954,6 +1138,7 @@ export function MoneyScreen() {
   }
 
   async function loadToday() {
+    setLoading(true);
     try {
       const res = await api.myMoney("");
       setData(res);
@@ -961,11 +1146,14 @@ export function MoneyScreen() {
       setError("");
     } catch (e) {
       setError(e.message);
+    } finally {
+      setLoading(false);
     }
   }
   async function loadRange(e) {
     e.preventDefault();
     if (!start || !end) return setError("Boshlanish va tugash sanasini tanlang");
+    setLoading(true);
     try {
       const res = await api.myMoney(`?start_date=${toApiDate(start)}&end_date=${toApiDate(end)}`);
       setData(res);
@@ -973,6 +1161,8 @@ export function MoneyScreen() {
       setError("");
     } catch (err) {
       setError(err.message);
+    } finally {
+      setLoading(false);
     }
   }
   useEffect(() => {
@@ -984,18 +1174,23 @@ export function MoneyScreen() {
         setTitle("Bugun");
         setError("");
       })
-      .catch((e) => { if (alive) setError(e.message); });
+      .catch((e) => { if (alive) setError(e.message); })
+      .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, []);
 
   return (
     <div>
+      {loading && !data ? (
+        <MoneySkeleton />
+      ) : (
       <div className="card">
         <div className="muted">{title} jami</div>
         <div className="stat">{money(data?.total)}</div>
         <div className="muted" style={{ marginTop: 10 }}>Shundan yetkazilgan</div>
         <div className="h2" style={{ margin: 0 }}>{money(data?.delivered)}</div>
       </div>
+      )}
       <form className="card stack" onSubmit={loadRange}>
         <div className="h2">Sana oralig'i</div>
         <DatePicker label="Boshlanish" value={start} onChange={setStart} />
@@ -1016,12 +1211,14 @@ export function OrderFlow({ marketId, user, go, editOrderId, backTo = "#/" }) {
   const [cart, setCart] = useState({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const blocked = market && BLOCKED.has(market.status_code);
   const editing = Boolean(editOrderId);
 
   useEffect(() => {
     let alive = true;
     setError("");
+    setLoading(true);
     if (!editOrderId) setCart({});
     const jobs = [api.market(marketId), api.products()];
     if (editOrderId) jobs.push(api.order(editOrderId));
@@ -1038,7 +1235,8 @@ export function OrderFlow({ marketId, user, go, editOrderId, backTo = "#/" }) {
           setCart(next);
         }
       })
-      .catch((e) => { if (alive) setError(e.message); });
+      .catch((e) => { if (alive) setError(e.message); })
+      .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [marketId, editOrderId]);
 
@@ -1093,6 +1291,15 @@ export function OrderFlow({ marketId, user, go, editOrderId, backTo = "#/" }) {
             </button>
           )}
         </div>
+      </div>
+    );
+  }
+
+  if (loading && !market) {
+    return (
+      <div>
+        <ScreenHeader title={editing ? "Tahrirlash" : "Buyurtma olish"} backTo={backTo} go={go} />
+        <ProductListSkeleton />
       </div>
     );
   }
@@ -1156,6 +1363,7 @@ export function OrderView({ id, user, go, backTo }) {
   useEffect(() => {
     let alive = true;
     setMarket(null);
+    setOrder(null);
     api.order(id)
       .then((o) => { if (alive) setOrder(o); })
       .catch((e) => { if (alive) setError(e.message); });
@@ -1206,7 +1414,7 @@ export function OrderView({ id, user, go, backTo }) {
     return (
       <div>
         <ScreenHeader title="Buyurtma" backTo={back} go={go} />
-        <div className="card">Yuklanmoqda...</div>
+        {error ? <div className="card">{error}</div> : <DetailSkeleton />}
       </div>
     );
   }
@@ -1348,7 +1556,7 @@ function DelivererTransactionsSection({ user }) {
   const [dateQuery, setDateQuery] = useState("");
   const [page, setPage] = useState(1);
   const [next, setNext] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
 
   async function load(targetPage = 1, reset = false) {
@@ -1449,7 +1657,7 @@ function DelivererTransactionsSection({ user }) {
           </div>
         );
       }) : (
-        !busy && <div className="empty">Hech qanday tranzaksiya topilmadi</div>
+        busy ? <CardListSkeleton count={4} /> : <div className="empty">Hech qanday tranzaksiya topilmadi</div>
       )}
       {next && (
         <button type="button" className="btn secondary" disabled={busy} style={{ marginTop: 12 }} onClick={() => {
@@ -1563,7 +1771,7 @@ export function ProfileScreen({ user, onLogout, onUserUpdate }) {
   );
 }
 
-export function OrderListCard({ items, go, from, empty = "Buyurtma yo'q" }) {
+export function OrderListCard({ items, go, from, empty = "Buyurtma yo'q", loading = false }) {
   const groups = [];
   items.forEach((o) => {
     const day = o.created_date || (o.created_at || "").slice(0, 10);
@@ -1571,6 +1779,7 @@ export function OrderListCard({ items, go, from, empty = "Buyurtma yo'q" }) {
     if (!last || last.day !== day) groups.push({ day, rows: [o] });
     else last.rows.push(o);
   });
+  if (loading && !items.length) return <OrderListSkeleton />;
   if (!items.length) return <div className="empty">{empty}</div>;
   return (
     <div>
