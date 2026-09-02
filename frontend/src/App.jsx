@@ -22,7 +22,7 @@ const AGENT_TABS = [
   ["/profile", "Profil", "👤"],
 ];
 
-function AgentApp({ user, path, parts, go, logout }) {
+function AgentApp({ user, path, parts, go, logout, onUserUpdate }) {
   let screen = <MarketsScreen go={go} user={user} />;
   if (path === "/map") screen = <MapScreen go={go} />;
   else if (path === "/markets/new") screen = <NewMarket go={go} />;
@@ -31,7 +31,7 @@ function AgentApp({ user, path, parts, go, logout }) {
   else if (parts[0] === "orders" && parts[1]) screen = <OrderView id={parts[1]} user={user} go={go} />;
   else if (path === "/orders") screen = <MyOrdersScreen go={go} />;
   else if (path === "/money") screen = <MoneyScreen />;
-  else if (path === "/profile") screen = <ProfileScreen user={user} onLogout={logout} />;
+  else if (path === "/profile") screen = <ProfileScreen user={user} onLogout={logout} onUserUpdate={onUserUpdate} />;
 
   const nested = path === "/markets/new" || (parts[0] === "markets" && parts[1]) || (parts[0] === "orders" && parts[1]);
   const titles = { "/": "Do'konlar", "/map": "Xarita", "/orders": "Buyurtmalarim", "/money": "Pulim", "/profile": "Profil" };
@@ -76,7 +76,9 @@ export default function App() {
       setBoot(false);
       return;
     }
+    let alive = true;
     api.me().then((u) => {
+      if (!alive) return;
       saveSession({ user: u });
       setUser((prev) => {
         if (
@@ -86,14 +88,16 @@ export default function App() {
           && prev.first_name === u.first_name
           && prev.last_name === u.last_name
           && prev.phone_number === u.phone_number
+          && prev.photo === u.photo
         ) {
           return prev;
         }
         return u;
       });
     })
-      .catch(() => { clearSession(); setUser(null); })
-      .finally(() => setBoot(false));
+      .catch(() => { if (alive) { clearSession(); setUser(null); } })
+      .finally(() => { if (alive) setBoot(false); });
+    return () => { alive = false; };
   }, []);
 
   async function logout() {
@@ -101,6 +105,11 @@ export default function App() {
     clearSession();
     setUser(null);
     go("#/login");
+  }
+
+  function onUserUpdate(next) {
+    saveSession({ user: next });
+    setUser(next);
   }
 
   if (boot) return <div className="app"><div className="card">Yuklanmoqda...</div></div>;
@@ -117,11 +126,11 @@ export default function App() {
   }
 
   if (user.role_type === "ADMIN") {
-    return <AdminApp user={user} path={path} parts={parts} go={go} logout={logout} />;
+    return <AdminApp user={user} path={path} parts={parts} go={go} logout={logout} onUserUpdate={onUserUpdate} />;
   }
 
   if (user.role_type === "DELIVERER") {
-    return <DelivererApp user={user} path={path} parts={parts} go={go} logout={logout} />;
+    return <DelivererApp user={user} path={path} parts={parts} go={go} logout={logout} onUserUpdate={onUserUpdate} />;
   }
 
   if (user.role_type !== "AGENT") {
@@ -136,5 +145,5 @@ export default function App() {
     );
   }
 
-  return <AgentApp user={user} path={path} parts={parts} go={go} logout={logout} />;
+  return <AgentApp user={user} path={path} parts={parts} go={go} logout={logout} onUserUpdate={onUserUpdate} />;
 }

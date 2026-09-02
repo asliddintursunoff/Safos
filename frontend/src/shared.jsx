@@ -395,7 +395,10 @@ export function MarketsScreen({ go, user }) {
   const [items, setItems] = useState([]);
   const [error, setError] = useState("");
 
+  const loadId = useRef(0);
+
   async function load(search = q, meters = radius) {
+    const id = ++loadId.current;
     try {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
@@ -409,14 +412,19 @@ export function MarketsScreen({ go, user }) {
       }
       const qs = params.toString() ? `?${params}` : "";
       const data = await api.markets(qs);
+      if (id !== loadId.current) return;
       setItems(Array.isArray(data) ? data : data.results || []);
       setError("");
     } catch (e) {
+      if (id !== loadId.current) return;
       setError(meters ? "Joylashuv olinmadi yoki yaqin do'kon yo'q" : e.message);
     }
   }
 
-  useEffect(() => { load("", null); }, []);
+  useEffect(() => {
+    load("", null);
+    return () => { loadId.current += 1; };
+  }, []);
 
   const canOpenDebtStats = user && ["ADMIN", "DELIVERER"].includes(String(user.role_type || user.role || "").toUpperCase());
 
@@ -487,7 +495,9 @@ export function NewMarket({ go, backTo = "#/", marketId = null }) {
 
   useEffect(() => {
     if (!marketId) return;
+    let alive = true;
     api.market(marketId).then((m) => {
+      if (!alive) return;
       setForm({
         name: m.name || "",
         description: m.description || "",
@@ -500,7 +510,8 @@ export function NewMarket({ go, backTo = "#/", marketId = null }) {
       });
       setExistingImage(m.image || null);
       if (m.latitude && m.longitude) setNote("Xaritadan tanlangan");
-    }).catch((err) => setError(err.message));
+    }).catch((err) => { if (alive) setError(err.message); });
+    return () => { alive = false; };
   }, [marketId]);
 
   useEffect(() => {
@@ -634,7 +645,11 @@ export function MapScreen({ go }) {
   })();
 
   useEffect(() => {
-    api.markets().then((d) => setMarkets(Array.isArray(d) ? d : d.results || [])).catch((e) => setError(e.message));
+    let alive = true;
+    api.markets()
+      .then((d) => { if (alive) setMarkets(Array.isArray(d) ? d : d.results || []); })
+      .catch((e) => { if (alive) setError(e.message); });
+    return () => { alive = false; };
   }, []);
 
   function drawUser() {
@@ -888,9 +903,11 @@ export function MyOrdersScreen({ go }) {
   const [items, setItems] = useState([]);
   const [error, setError] = useState("");
   useEffect(() => {
+    let alive = true;
     api.orders("?page_size=200")
-      .then((d) => setItems(d.results || d))
-      .catch((e) => setError(e.message));
+      .then((d) => { if (alive) setItems(d.results || d); })
+      .catch((e) => { if (alive) setError(e.message); });
+    return () => { alive = false; };
   }, []);
   const groups = [];
   items.forEach((o) => {
@@ -958,7 +975,18 @@ export function MoneyScreen() {
       setError(err.message);
     }
   }
-  useEffect(() => { loadToday(); }, []);
+  useEffect(() => {
+    let alive = true;
+    api.myMoney("")
+      .then((res) => {
+        if (!alive) return;
+        setData(res);
+        setTitle("Bugun");
+        setError("");
+      })
+      .catch((e) => { if (alive) setError(e.message); });
+    return () => { alive = false; };
+  }, []);
 
   return (
     <div>
@@ -992,20 +1020,27 @@ export function OrderFlow({ marketId, user, go, editOrderId, backTo = "#/" }) {
   const editing = Boolean(editOrderId);
 
   useEffect(() => {
-    api.market(marketId).then(setMarket).catch((e) => setError(e.message));
-    api.products().then(setCats).catch((e) => setError(e.message));
-  }, [marketId]);
-
-  useEffect(() => {
-    if (!editOrderId) return;
-    api.order(editOrderId).then((order) => {
-      const next = {};
-      (order.items || []).forEach((it) => {
-        if (it.product_id) next[it.product_id] = it.quantity;
-      });
-      setCart(next);
-    }).catch((e) => setError(e.message));
-  }, [editOrderId]);
+    let alive = true;
+    setError("");
+    if (!editOrderId) setCart({});
+    const jobs = [api.market(marketId), api.products()];
+    if (editOrderId) jobs.push(api.order(editOrderId));
+    Promise.all(jobs)
+      .then(([m, products, order]) => {
+        if (!alive) return;
+        setMarket(m);
+        setCats(Array.isArray(products) ? products : products?.results || []);
+        if (order) {
+          const next = {};
+          (order.items || []).forEach((it) => {
+            if (it.product_id) next[it.product_id] = it.quantity;
+          });
+          setCart(next);
+        }
+      })
+      .catch((e) => { if (alive) setError(e.message); });
+    return () => { alive = false; };
+  }, [marketId, editOrderId]);
 
   useEffect(() => {
     if (editOrderId || !market) return;
@@ -1121,17 +1156,9 @@ export function OrderView({ id, user, go, backTo }) {
   useEffect(() => {
     let alive = true;
     setMarket(null);
-    api.order(id).then(async (o) => {
-      if (!alive) return;
-      setOrder(o);
-      if (!o.market_id) return;
-      try {
-        const m = await api.market(o.market_id);
-        if (alive) setMarket(m);
-      } catch {
-        /* owner fields may already be on the order */
-      }
-    }).catch((e) => { if (alive) setError(e.message); });
+    api.order(id)
+      .then((o) => { if (alive) setOrder(o); })
+      .catch((e) => { if (alive) setError(e.message); });
     return () => { alive = false; };
   }, [id]);
 
@@ -1437,7 +1464,7 @@ function DelivererTransactionsSection({ user }) {
   );
 }
 
-export function ProfileScreen({ user, onLogout }) {
+export function ProfileScreen({ user, onLogout, onUserUpdate }) {
   const initials = `${(user.first_name || "A")[0]}${(user.last_name || "")[0] || ""}`.toUpperCase();
   const [editing, setEditing] = useState(false);
   const [firstName, setFirstName] = useState(user.first_name || "");
@@ -1463,13 +1490,14 @@ export function ProfileScreen({ user, onLogout }) {
         const body = { first_name: firstName, last_name: lastName };
         res = await api.updateUser(user.id, body);
       }
-      // Refresh current user and persist session
-      const me = await api.me();
-      saveSession({ user: me });
-      // Reload to ensure App picks up new user state
-      window.location.reload();
+      const nextUser = res && res.id ? res : await api.me();
+      saveSession({ user: nextUser });
+      onUserUpdate?.(nextUser);
+      setEditing(false);
+      setPhotoFile(null);
     } catch (err) {
       setError(err.message || String(err));
+    } finally {
       setBusy(false);
     }
   }
@@ -1479,12 +1507,13 @@ export function ProfileScreen({ user, onLogout }) {
     setBusy(true);
     setError("");
     try {
-      await api.updateUser(user.id, { photo: null });
-      const me = await api.me();
-      saveSession({ user: me });
-      window.location.reload();
+      const res = await api.updateUser(user.id, { photo: null });
+      const nextUser = res && res.id ? res : await api.me();
+      saveSession({ user: nextUser });
+      onUserUpdate?.(nextUser);
     } catch (err) {
       setError(err.message || String(err));
+    } finally {
       setBusy(false);
     }
   }

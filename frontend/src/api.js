@@ -36,6 +36,38 @@ export function clearSession() {
   localStorage.removeItem(ACCESS);
   localStorage.removeItem(REFRESH);
   localStorage.removeItem(USER);
+  invalidateApiCache();
+}
+
+const GET_CACHE_MS = 10000;
+const inflightGets = new Map();
+const getCache = new Map();
+let cacheGeneration = 0;
+let refreshPromise = null;
+
+export function invalidateApiCache() {
+  cacheGeneration += 1;
+  inflightGets.clear();
+  getCache.clear();
+}
+
+function readGetCache(path) {
+  const hit = getCache.get(path);
+  if (!hit) return undefined;
+  if (hit.expires <= Date.now()) {
+    getCache.delete(path);
+    return undefined;
+  }
+  return hit.data;
+}
+
+function writeGetCache(path, data, generation) {
+  if (generation !== cacheGeneration) return;
+  getCache.set(path, { data, expires: Date.now() + GET_CACHE_MS });
+  if (getCache.size > 80) {
+    const oldest = getCache.keys().next().value;
+    getCache.delete(oldest);
+  }
 }
 
 async function parseError(res) {
@@ -53,41 +85,47 @@ async function parseError(res) {
 }
 
 async function refreshTokens() {
-  const refresh = getRefresh();
-  if (!refresh) return false;
-  const res = await fetch(`${API_BASE}/api/users/refresh/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh }),
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    const refresh = getRefresh();
+    if (!refresh) return false;
+    const res = await fetch(`${API_BASE}/api/users/refresh/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh }),
+    });
+    if (!res.ok) {
+      clearSession();
+      return false;
+    }
+    const data = await res.json();
+    saveSession({ access: data.access, refresh: data.refresh || refresh });
+    return true;
+  })().finally(() => {
+    refreshPromise = null;
   });
-  if (!res.ok) {
-    clearSession();
-    return false;
-  }
-  const data = await res.json();
-  saveSession({ access: data.access, refresh: data.refresh || refresh });
-  return true;
+  return refreshPromise;
 }
 
-export async function requestPage(url) {
-  const parsed = new URL(url, window.location.origin);
-  return request(`${parsed.pathname}${parsed.search}`);
+function splitRequestOptions(options) {
+  const { fresh, ...fetchOptions } = options || {};
+  return { fresh: Boolean(fresh), fetchOptions };
 }
 
-export async function request(path, options = {}) {
-  const headers = { ...(options.headers || {}) };
-  if (!(options.body instanceof FormData)) {
+async function sendFetch(path, fetchOptions) {
+  const headers = { ...(fetchOptions.headers || {}) };
+  if (!(fetchOptions.body instanceof FormData)) {
     headers["Content-Type"] = headers["Content-Type"] || "application/json";
   }
   const token = getAccess();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  let res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  let res = await fetch(`${API_BASE}${path}`, { ...fetchOptions, headers });
   if (res.status === 401 && getRefresh()) {
     const ok = await refreshTokens();
     if (ok) {
       headers.Authorization = `Bearer ${getAccess()}`;
-      res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+      res = await fetch(`${API_BASE}${path}`, { ...fetchOptions, headers });
     }
   }
   if (!res.ok) {
@@ -97,13 +135,52 @@ export async function request(path, options = {}) {
   return res.json();
 }
 
+export async function requestPage(url, options = {}) {
+  const parsed = new URL(url, window.location.origin);
+  return request(`${parsed.pathname}${parsed.search}`, options);
+}
+
+export async function request(path, options = {}) {
+  const method = String(options.method || "GET").toUpperCase();
+  const { fresh, fetchOptions } = splitRequestOptions(options);
+  const isGet = method === "GET";
+  const generation = cacheGeneration;
+
+  if (isGet && !fresh) {
+    const cached = readGetCache(path);
+    if (cached !== undefined) return cached;
+    const pending = inflightGets.get(path);
+    if (pending) return pending;
+  } else if (isGet) {
+    const pending = inflightGets.get(path);
+    if (pending) return pending;
+  }
+
+  const run = sendFetch(path, fetchOptions).then((data) => {
+    if (isGet) {
+      writeGetCache(path, data, generation);
+    } else {
+      invalidateApiCache();
+    }
+    return data;
+  });
+
+  if (isGet) {
+    inflightGets.set(path, run);
+    run.finally(() => {
+      if (inflightGets.get(path) === run) inflightGets.delete(path);
+    });
+  }
+  return run;
+}
+
 export const api = {
   login: (body) =>
     request("/api/users/login/", {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  me: () => request("/api/users/me/"),
+  me: (opts = {}) => request("/api/users/me/", opts),
   logout: (refresh) =>
     request("/api/users/logout/", {
       method: "POST",
@@ -116,8 +193,8 @@ export const api = {
     request(`/api/users/${id}/`, { method: "PATCH", body: body instanceof FormData ? body : JSON.stringify(body) }),
   deleteUser: (id) => request(`/api/users/${id}/`, { method: "DELETE" }),
 
-  markets: (qs = "") => request(`/api/markets/${qs}`),
-  market: (id) => request(`/api/markets/${id}/`),
+  markets: (qs = "", opts = {}) => request(`/api/markets/${qs}`, opts),
+  market: (id, opts = {}) => request(`/api/markets/${id}/`, opts),
   createMarket: (body) =>
     request("/api/markets/", {
       method: "POST",
@@ -146,7 +223,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  products: () => request("/api/products/"),
+  products: (opts = {}) => request("/api/products/", opts),
   createProduct: (formData) =>
     request("/api/products/", { method: "POST", body: formData }),
   updateProduct: (id, formData) =>
@@ -165,8 +242,8 @@ export const api = {
     }),
   deleteCategory: (id) =>
     request(`/api/products/categories/${id}/`, { method: "DELETE" }),
-  orders: (qs = "") => request(`/api/orders/${qs}`),
-  order: (id) => request(`/api/orders/${id}/`),
+  orders: (qs = "", opts = {}) => request(`/api/orders/${qs}`, opts),
+  order: (id, opts = {}) => request(`/api/orders/${id}/`, opts),
   createOrder: (body) =>
     request("/api/orders/", { method: "POST", body: JSON.stringify(body) }),
   updateOrder: (id, body) =>
@@ -179,8 +256,8 @@ export const api = {
     }),
   myMoney: (qs = "") => request(`/api/orders/my-order-price${qs}`),
   usersMoney: (qs = "") => request(`/api/orders/users-total-price${qs}`),
-  todayCount: () => request("/api/orders/today/count-of-orders"),
-  todayMarkets: () => request("/api/orders/today/delivering-markets"),
+  todayCount: (opts = {}) => request("/api/orders/today/count-of-orders", opts),
+  todayMarkets: (opts = {}) => request("/api/orders/today/delivering-markets", opts),
   pay: (body) =>
     request("/api/transactions/", { method: "POST", body: JSON.stringify(body) }),
   payments: (marketId, qs = "") => {

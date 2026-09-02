@@ -140,12 +140,15 @@ function TodayScreen({ go }) {
 
   useEffect(() => {
     let alive = true;
-    api.todayCount()
-      .then((c) => { if (alive) setCounts(c); })
-      .catch((e) => { if (alive) setError(e.message); });
-    api.orders("?status=APPROVED&page_size=200")
-      .then((o) => { if (alive) { setOrders(o.results || o); setError(""); } })
-      .catch((e) => { if (alive) setError(e.message); });
+    Promise.all([
+      api.todayCount().then((c) => { if (alive) setCounts(c); }),
+      api.orders("?status=APPROVED&page_size=200").then((o) => {
+        if (alive) {
+          setOrders(o.results || o);
+          setError("");
+        }
+      }),
+    ]).catch((e) => { if (alive) setError(e.message); });
     return () => { alive = false; };
   }, []);
 
@@ -349,7 +352,10 @@ function NearWaysScreen({ go }) {
 
   async function loadAndPlan() {
     try {
-      const [data, markets] = await Promise.all([api.todayMarkets(), api.markets()]);
+      const [data, markets] = await Promise.all([
+        api.todayMarkets({ fresh: true }),
+        api.markets("", { fresh: true }),
+      ]);
       const list = Array.isArray(data) ? data : data.results || [];
       const byId = {};
       (Array.isArray(markets) ? markets : markets.results || []).forEach((m) => {
@@ -493,13 +499,17 @@ function MarketHub({ marketId, go, user }) {
   const [statusBusy, setStatusBusy] = useState(false);
   const [statusDraft, setStatusDraft] = useState("AVAILABLE");
 
+  const loadId = useRef(0);
+
   async function load() {
+    const id = ++loadId.current;
     try {
       const [m, s, d] = await Promise.all([
         api.market(marketId),
         api.analyticsDetail(marketId).catch(() => null),
         api.marketDebts(marketId).catch(() => []),
       ]);
+      if (id !== loadId.current) return;
       setMarket(m);
       setStatusDraft((m?.status_code || m?.status || "AVAILABLE").toUpperCase());
       setStats(s);
@@ -507,11 +517,15 @@ function MarketHub({ marketId, go, user }) {
       setDebts(rows);
       setError("");
     } catch (e) {
+      if (id !== loadId.current) return;
       setError(e.message);
     }
   }
 
-  useEffect(() => { load(); }, [marketId]);
+  useEffect(() => {
+    load();
+    return () => { loadId.current += 1; };
+  }, [marketId]);
 
   async function submitPay(e) {
     e.preventDefault();
@@ -699,8 +713,14 @@ function MarketPaymentsScreen({ marketId, go }) {
   }
 
   useEffect(() => {
-    api.market(marketId).then(setMarket).catch(() => {});
-    load(1);
+    let alive = true;
+    Promise.all([
+      api.market(marketId).catch(() => null),
+      load(1),
+    ]).then(([m]) => {
+      if (alive && m) setMarket(m);
+    }).catch(() => {});
+    return () => { alive = false; };
   }, [marketId]);
 
   return (
@@ -733,8 +753,19 @@ function MarketDebtOrdersScreen({ marketId, go }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.market(marketId).then(setMarket).catch(() => {});
-    api.marketDebts(marketId).then((d) => { const rows = Array.isArray(d) ? d : d.results || []; setItems(rows); }).catch((e) => setError(e.message));
+    let alive = true;
+    Promise.all([
+      api.market(marketId).catch(() => null),
+      api.marketDebts(marketId),
+    ])
+      .then(([m, d]) => {
+        if (!alive) return;
+        if (m) setMarket(m);
+        const rows = Array.isArray(d) ? d : d.results || [];
+        setItems(rows);
+      })
+      .catch((e) => { if (alive) setError(e.message); });
+    return () => { alive = false; };
   }, [marketId]);
 
   return (
@@ -776,13 +807,19 @@ function MarketOrdersScreen({ marketId, go }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.market(marketId).then(setMarket).catch(() => {});
-    api.orders(`?market_id=${marketId}&page_size=200`)
-      .then((d) => {
+    let alive = true;
+    Promise.all([
+      api.market(marketId).catch(() => null),
+      api.orders(`?market_id=${marketId}&page_size=200`),
+    ])
+      .then(([m, d]) => {
+        if (!alive) return;
+        if (m) setMarket(m);
         const rows = d.results || d;
         setItems(rows.filter((o) => String(o.market_id) === String(marketId)));
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => { if (alive) setError(e.message); });
+    return () => { alive = false; };
   }, [marketId]);
 
   return (
@@ -807,11 +844,8 @@ function PendingScreen({ go }) {
 
   async function load() {
     try {
-      const [pending, approved] = await Promise.all([
-        api.orders("?status=PENDING&page_size=200"),
-        api.orders("?status=APPROVED&page_size=200"),
-      ]);
-      const rows = [...(pending.results || pending), ...(approved.results || approved)];
+      const data = await api.orders("?status=PENDING&status=APPROVED&page_size=200");
+      const rows = data.results || data || [];
       const uniq = [];
       const seen = new Set();
       rows.forEach((o) => {
@@ -841,7 +875,11 @@ function PendingScreen({ go }) {
     setError("");
     try {
       await api.setOrderStatus(o.id, next);
-      await load();
+      setItems((prev) => prev.map((row) => (
+        row.id === o.id
+          ? { ...row, status_code: next, status: orderStatusMeta(next, next).label }
+          : row
+      )));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1122,43 +1160,31 @@ function MarketStatisticsScreen({ go, compact = false }) {
       if (hasDebt || compact) params.set("has_debt", "true");
       if (ordering && !compact) params.set("ordering", ordering);
 
-      const [raw, summary] = await Promise.all([
-        api.analyticsActivity(`?${params.toString()}`),
-        api.analyticsSummary(),
-      ]);
+      const activityPromise = api.analyticsActivity(`?${params.toString()}`);
+      const summaryPromise = compact ? Promise.resolve(null) : api.analyticsSummary();
+      const [raw, summary] = await Promise.all([activityPromise, summaryPromise]);
 
-      let list = Array.isArray(raw.results) ? raw.results : raw.results || [];
+      const list = Array.isArray(raw.results) ? raw.results : (Array.isArray(raw) ? raw : []);
       if (compact) {
-        const debtRows = await Promise.all(
-          list.map(async (market) => {
-            try {
-              const debtData = await api.marketDebts(market.id, "?page_size=200");
-              const debtOrders = Array.isArray(debtData) ? debtData : (debtData.results || []);
-              const debtTotal = Number(market.total_debt || 0);
-              if (!debtOrders.length || debtTotal <= 0) return null;
-              const dates = debtOrders
-                .map((item) => item.created_at || item.payment_date || item.updated_at)
-                .map((value) => parseAnyDate(value))
-                .filter(Boolean);
-              const oldestDate = dates.length ? new Date(Math.min(...dates.map((date) => date.getTime()))) : null;
-              return {
-                id: market.id,
-                name: market.name,
-                debt_total: debtTotal,
-                debt_date: oldestDate ? oldestDate.toISOString() : null,
-              };
-            } catch {
-              return null;
-            }
-          })
-        );
-        list = debtRows.filter(Boolean).sort((a, b) => {
-          const left = a.debt_date ? new Date(a.debt_date).getTime() : Number.MAX_SAFE_INTEGER;
-          const right = b.debt_date ? new Date(b.debt_date).getTime() : Number.MAX_SAFE_INTEGER;
-          return left - right;
+        const debtRows = list
+          .filter((market) => Number(market.total_debt || 0) > 0)
+          .map((market) => ({
+            id: market.id,
+            name: market.name,
+            debt_total: Number(market.total_debt || 0),
+            debt_date: market.last_order_at || market.first_order_at || market.oldest_unpaid_order_at || null,
+          }))
+          .sort((a, b) => {
+            const left = a.debt_date ? new Date(a.debt_date).getTime() : Number.MAX_SAFE_INTEGER;
+            const right = b.debt_date ? new Date(b.debt_date).getTime() : Number.MAX_SAFE_INTEGER;
+            return left - right;
+          });
+        setRows(debtRows);
+        setTotals({
+          market_count: debtRows.length,
+          markets_with_debt: debtRows.length,
+          total_debt: debtRows.reduce((sum, row) => sum + Number(row.debt_total || 0), 0),
         });
-        setRows(list);
-        setTotals({ market_count: list.length, markets_with_debt: list.length, total_debt: list.reduce((sum, row) => sum + Number(row.debt_total || 0), 0) });
         return;
       }
 
@@ -2058,7 +2084,7 @@ function MoreSheet({ open, items, path, go, onClose }) {
   );
 }
 
-export function DelivererApp({ user, path, parts, go, logout, admin = false }) {
+export function DelivererApp({ user, path, parts, go, logout, onUserUpdate, admin = false }) {
   const [moreOpen, setMoreOpen] = useState(false);
   useEffect(() => { setMoreOpen(false); }, [path]);
 
@@ -2093,7 +2119,7 @@ export function DelivererApp({ user, path, parts, go, logout, admin = false }) {
     screen = (
       <div>
         <ScreenHeader title="Profil" backTo="#/" go={go} />
-        <ProfileScreen user={user} onLogout={logout} />
+        <ProfileScreen user={user} onLogout={logout} onUserUpdate={onUserUpdate} />
       </div>
     );
   }
